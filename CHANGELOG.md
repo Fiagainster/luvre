@@ -4,10 +4,11 @@
 
 ## [0.4.2] — 2026-11-15
 
-真题第二轮（Root-Me ch18/ch20 纯 UI 做题暴露的短板，全程复盘见 `docs/writeup-ch20.md` 与 dev-notes 踩坑 #27–#30）。
+真题两轮（Root-Me ch13/ch18/ch20 纯 UI 做题暴露的短板；复现手记 `docs/writeup-ch13.md`、`docs/writeup-ch20.md`，dev-notes 踩坑 #27–#30）。
 
 ### 新增
 
+- **gdb 命令框**：控制台上方输入任意 gdb CLI 命令，走 MI `-interpreter-exec console` 直达（`handle SIGTRAP nostop pass` 放行自陷样本、`x/16xw`、`info proc mappings`…）——ch13 自陷型样本的唯一钥匙
 - **HEX 多页送解码实验室**：Shift+发送一次连取最多 8 页自动拼接（块尾 clamp）——自哈希样本要 163 字节完整代码段，单页 chunk 不够
 - **解码实验室输出编码切换**：utf-8 / gbk / latin-1（字节保真）下拉，非 UTF-8 样本不再一屏 FFFD
 - **HEX 复制按钮 ⧉**：当前窗口数据导出为标准 hexdump（`0x%08x  hex |ascii|`）
@@ -21,9 +22,11 @@
 - **wsl 探测炸 Popen 内部 reader 线程**：`wsl.exe` stderr 的 UTF-8 中文警告按 locale GBK 严格解码 → UnicodeDecodeError 出在不可捕获的 `_readerthread` 线程；subprocess 显式 `encoding="utf-8", errors="replace"`（wsl 两处 + java -version 一处）（dev-notes #29）
 - **ELF section 名全显示 undefined**：binfile 解析器从不读 `.shstrtab` → 解析 e_shstrndx 两遍定位（非法索引回退首个 STRTAB），名字与 overlay 计算解耦
 - **gdb stdin 投递语义不明**：placeholder 注明「仅会话启动时投递一次，改动需重启会话」
+- **gdb 控制台三处显示问题**（ch13 手记）：目标退出后停留旧视图 → exited 态也刷新列表/控制台；程序 stdout 与 MI 流交错被归类 noise 隐藏 → 去前缀按程序输出直接显示；上一个文件的函数过滤器残留 → 打开新文件时清空
 
 ### 真题验证
 
+- **ch13**（884 B 裸 syscall 汇编，signal 链 + XOR 解密）：裸反汇编避花指令 + 解码实验室一条链解 484 B → 密码静态解出 → gdb 命令框放行 SIGTRAP 动态闭环（[writeup-ch13.md](https://github.com/Fiagainster/lovelyreverse/blob/main/docs/writeup-ch13.md)）
 - **ch20.bin**（Root-Me 自哈希 crackme，732 B）：裸反汇编读出 syscall 骨架 → HEX 多页拉满 163 字节代码 → 页内算种子 **0xAC77E166** → 直推密码 **`HardW@re_Br3akPoiNT_r0ckS`** → gdb 桥喂 stdin 动态闭环成功
 - **ch18.bin**（VM opcode 型，5 KB）：纯 UI 解出；strace 实证程序任何输入下零 write——成败只能靠 gdb 内存确认（dev-notes #28）
 

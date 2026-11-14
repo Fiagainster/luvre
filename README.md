@@ -39,7 +39,7 @@
 | **✎ decompile** | C 伪代码 + 自研语法高亮；**代码里的函数名/地址可点击跳转**；✎ 重命名 / ✚ 备注 / 复制 / 下载 `.c` |
 | **⌗ disassembly** | 汇编清单（地址/字节/助记符），call 目标可点击跟进 |
 | **◈ call graph** | **函数调用图**（Ghidra 式层次布局）：caller 在上 / callee 在下，层次分层 + 重心排序减少交叉；实线箭头表示调用方向、虚线表示回边；**双击节点增量展开**，滚轮缩放、拖拽平移 |
-| **⚙ 动态调试** | **gdb 桥双传输**（WSL Linux ELF / Windows 本机 PE）：断点（pending 队列，启动自动补挂）、运行/继续/行级单步/**指令级单步**（strip 样本行级 step 会失败）、中断、**写寄存器绕反调试**（$rax=0）、全寄存器面板、调用栈、内存读取一键送解码实验室、程序参数与 stdin 暂存、**环境变量启动参数**（GTK 类 GUI 样本喂 `DISPLAY=:99`）、**切样本自动重启会话**（旧会话指向别的程序时提示并可一键切换） |
+| **⚙ 动态调试** | **gdb 桥双传输**（WSL Linux ELF / Windows 本机 PE）：断点（pending 队列，启动自动补挂）、运行/继续/行级单步/**指令级单步**（strip 样本行级 step 会失败）、中断、**写寄存器绕反调试**（$rax=0）、全寄存器面板、调用栈、内存读取一键送解码实验室、程序参数与 stdin 暂存、**环境变量启动参数**（GTK 类 GUI 样本喂 `DISPLAY=:99`）、**gdb 命令框**（任意 CLI 命令直达，`handle SIGTRAP nostop pass` 放行自陷样本）、**切样本自动重启会话**（旧会话指向别的程序时提示并可一键切换） |
 | **⊞ memory hex** | 按内存块原始读取，翻页/跳偏移（**输入完整 vaddr 自动定位所在内存块**，unmapped 地址列出可读范围）；⧉ 复制为标准 hexdump；**Shift+一键送解码实验室可连发多页**（跨块大数据一次拉满） |
 | **⚡ raw disasm** | **按执行路径的裸反汇编**（混淆兜底）：任意地址起，capstone 顺着真实执行流解码——无条件 JMP 跟随目标、**CALL 实为 JMP 识别**（压栈返回进垃圾的返回地址标记「死路」跳过）、**读取窗口向前扩 512B 余量**（call-as-jmp 目标常比命名入口靠前，向后跳转不断流）、反调试垃圾字节自动恢复到条件跳转目标；HEX 视图 ⚡ 一键从当前字节起解，跳转目标可点击跟进 |
 | **strings** | Ghidra 识别的字符串，一键送入解码实验室；**单击查引用（谁在用它），双击直接跳进引用函数的反编译并高亮那一行** |
@@ -232,7 +232,7 @@ CI（GitHub Actions，ubuntu + windows × Python 3.11/3.13）跑 `-m "not engine
 ```bash
 pip install build
 python -m build          # → dist/*.whl + dist/*.tar.gz
-gh release create v0.4.1 dist/* --title "v0.4.1" --notes "..."
+gh release create v0.4.2 dist/* --title "v0.4.2" --notes "..."
 ```
 
 ## 路线图
@@ -240,7 +240,7 @@ gh release create v0.4.1 dist/* --title "v0.4.1" --notes "..."
 - [ ] Linux/macOS 系统性支持
 - [ ] 结构体/数据类型编辑，Union 面板
 - [ ] Pattern Language（参考 ImHex）声明式解析数据
-- [x] gdb 桥接（动态调试面板，v0.4.0；v0.4.1 补指令级单步 + 环境变量注入）
+- [x] gdb 桥接（动态调试面板，v0.4.0；v0.4.1 补指令级单步 + 环境变量注入；v0.4.2 补 gdb 命令框 + 切样本自动重启）
 - [ ] x64dbg 桥接
 - [x] PyInstaller 一键解包（pyinstxtractor 内置化）
 - [ ] pycdc 集成（.pyc 反编译回源码）

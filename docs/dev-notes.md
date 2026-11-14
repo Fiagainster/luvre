@@ -1,6 +1,6 @@
 # 开发笔记 & 续作指南（内部文档）
 
-> 状态快照 2026-11-14（**v0.4.1 已发布**：v0.3.1 之上，v0.3.2 通宵实测 10 项 UX 修复 → v0.3.3 ⚡裸反汇编 → v0.4.0 ⚙动态调试 gdb 桥（Windows+Linux）+ APK 静态分析 → v0.4.1 KeygenMe 真题打磨（裸反汇编向后余量、指令级单步、gdb env 注入、运行态快速失败、CLI UTF-8）；GitHub Release 带 whl+tar.gz）。给下一次继续开发的人（或下一个会话）看的。
+> 状态快照 2026-11-15（**v0.4.2 已发布**：v0.3.1 之上，v0.3.2 通宵实测 10 项 UX 修复 → v0.3.3 ⚡裸反汇编 → v0.4.0 ⚙动态调试 gdb 桥（Windows+Linux）+ APK 静态分析 → v0.4.1 KeygenMe 真题打磨（裸反汇编向后余量、指令级单步、gdb env 注入、运行态快速失败、CLI UTF-8）→ v0.4.2 自哈希真题第二轮（HEX Shift 多页/复制/unmapped 提示、解码实验室编码切换、gdb 命令框 + 切样本自动重启 + MI 混编转义根修、ELF shstrtab 节名、CLI 裸启动修复）；GitHub Release 带 whl+tar.gz）。给下一次继续开发的人（或下一个会话）看的。
 
 ## 当前进度
 
@@ -14,11 +14,11 @@
 | 函数重命名/备注、hex 一键送解码、最近打开 | ✅ 完成 |
 | PyInstaller 一键解包（inspector 入口） | ✅ 完成，pyre.exe 实测 |
 | 加密常量扫描 | ✅ 真实二进制验证（SM4/TEA/AES/Base64/CRC 均命中）；弱签名问题见已知问题 #2 |
-| `lvr doctor` + 部署自检（Ghidra/Java 探测、fail-fast） | ✅ 完成，12 个 CLI 单测 |
-| 测试 | ✅ 182 个（175 不需要 Ghidra + 7 个引擎集成，有 GHIDRA_INSTALL_DIR 时跑） |
+| `lvr doctor` + 部署自检（Ghidra/Java 探测、fail-fast） | ✅ 完成，19 个 CLI 单测 |
+| 测试 | ✅ 201 个（194 不需要 Ghidra + 7 个引擎集成，有 GHIDRA_INSTALL_DIR 时跑） |
 | CI workflow | ✅ 写好 |
 | ⚡ 裸反汇编（capstone 执行流解码，混淆兜底） | ✅ 完成（v0.3.3）：JMP 跟随 / CALL-实为-JMP 死返回 / 垃圾恢复；v0.4.1 补读取窗口向前 512B 余量；KeygenMe 142 条实测 |
-| ⚙ 动态调试 gdb 桥（WSL Linux / Windows 本机双传输） | ✅ 完成（v0.4.0）：断点 pending 队列、行级/指令级单步、写寄存器、内存偷取、中断；v0.4.1 补 env 注入与运行态快速失败；Random Crackme / challenge1 / KeygenMe 实测 |
+| ⚙ 动态调试 gdb 桥（WSL Linux / Windows 本机双传输） | ✅ 完成（v0.4.0）：断点 pending 队列、行级/指令级单步、写寄存器、内存偷取、中断；v0.4.1 补 env 注入与运行态快速失败；v0.4.2 补 gdb 命令框（任意 CLI 命令）、切样本自动重启会话、MI 混编转义根修（中文路径）；Random Crackme / challenge1 / KeygenMe / ch13 / ch18 / ch20 实测 |
 | APK 静态分析（zip 解包 + dex string pool） | ✅ 完成（v0.4.0） |
 | README | ✅ 完成（五张截图已用 v0.3.0 界面重拍，browser-use 后台直存 `docs/screenshots/`） |
 | UX 批量修复（v0.3.0 发布后 6 项实测反馈） | ✅ 完成，E2E 23 项全绿（打开残留/卡顿、xref 卡片置顶、解码预设+统一搜索、解包链、上传语义） |
@@ -281,7 +281,7 @@
 
 **设计决策**：gdb 会话独立于引擎 worker 线程（独立进程+独立锁），前端 1.2s 轮询状态而非 websocket；pending 断点队列让「先摆断点再启动」这一调试器直觉成立；fgets 阻塞场景由中断按钮（-exec-interrupt）兜底。
 
-## KeygenMe 真题工具化做题复盘（2026-11-14，Unreleased 5 项修复）
+## KeygenMe 真题工具化做题复盘（2026-11-14，5 项修复，已随 v0.4.1 发布）
 
 全程只用本工具（静态链 strings→xref→反编译被污染→⚡裸反汇编三段接力；动态链 gdb 桥 + 寄存器偷参）解出 Root-Me KeygenMe by int_0x80。serial = Σ (int8)name[i]^(i+2) mod 2⁶⁴。过程中暴露并修复：
 
@@ -299,7 +299,7 @@
 
 **辅助经验 — 浏览器自动化**：browser-use 的 press_key 对自定义 keydown 监听不生效（真用户不受影响），改用 evaluate_script 里 `dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`；click 工具在无头视口报 NATIVE_BROWSER_VIEWPORT_UNAVAILABLE，DOM `.click()` 稳定。
 
-## 自哈希 crackme 真题第二轮（2026-11-15，Unreleased 10 项修复）
+## 自哈希 crackme 真题第二轮（2026-11-15，10 项修复 + ch13 手记四项，已随 v0.4.2 发布）
 
 ch18（5 KB，VM opcode 型，strace 实证零 write——成败信息是 .rodata 摆设，只能靠 gdb 内存确认）
 与 ch20（732 B，自哈希 + 查表异或，种子 0xAC77E166 完全静态可算，密码 HardW@re_Br3akPoiNT_r0ckS，
