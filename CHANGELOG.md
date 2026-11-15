@@ -2,21 +2,20 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
-## [未发布]
+## [0.4.3] — 2026-11-15
+
+改名发布：lovelyreverse → luvre（取证圈已有成名的 Lovely* 工具系列，同社区同前缀易被误认为同族产品）。luvre 读作卢浮宫（把二进制当藏品上台解剖）。
 
 ### 变更
 
-- **项目更名 lovelyreverse → luvre**：取证圈已有成名的 Lovely* 工具系列（Tokeii0/LovelyMem 等），同社区同前缀易被误认为同族产品。luvre 读作卢浮宫（把二进制当藏品上台解剖），CLI `lvr` 与端口 7331 均不变；数据目录 `%LOCALAPPDATA%/luvre`（`~/.luvre`）首次运行自动从旧名迁移；≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。爱心吉祥物与配色不受影响（本就无字）
+- **项目更名 lovelyreverse → luvre**：CLI `lvr` 与端口 7331 均不变；数据目录 `%LOCALAPPDATA%/luvre`（`~/.luvre`）首次运行自动从旧名迁移；≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。爱心吉祥物与配色不受影响（本就无字）；README 五张截图随新品牌重拍（英文深色 ×3 / 中文亮色 ×2）
+- **gdb 传输选项按宿主自适应**：`/api/gdb/env` 补 `platform` 字段；POSIX 宿主的前端删掉 WSL 选项与发行版输入框，「Windows 本机 gdb」改标「本机 gdb（PATH）」并默认 local；Windows 无 WSL（`wsl_ok=false`）同样收敛。`gdb_start` 加 POSIX 硬闸兜底（stale 页面/裸 API 传 `wsl` 直接报错），探测中轮询不再叠加同步重探
+- **README/发行形态说明**：前置要求新增 gdb 可选项 bullet（仅动态调试需要），便携版说明注明其只覆盖静态链、动态调试始终需宿主自备 gdb
 
 ### 修复
 
 - **CI Ubuntu 全挂（v0.4.0 起三个版本）**：`mbcs` 是 Windows 专属 codec 名，io_encoding 原逻辑「wsl=utf-8 / 其余=mbcs」在 POSIX 上选到它必炸——ubuntu runner 自带真 gdb，本机传输真实可达，写 MI 行时 `LookupError: unknown encoding: mbcs`。改为一行条件：POSIX 一律 utf-8（dev-notes #31）
 - **gdb tab 漏 `data-i18n`**：EN 界面中心 tab 栏残留中文「动态调试」——补属性，并统一 ⛭ 齿轮符号
-
-### 变更
-
-- **gdb 传输选项按宿主自适应**：`/api/gdb/env` 补 `platform` 字段；POSIX 宿主的前端删掉 WSL 选项与发行版输入框，「Windows 本机 gdb」改标「本机 gdb（PATH）」并默认 local；Windows 无 WSL（`wsl_ok=false`）同样收敛。`gdb_start` 加 POSIX 硬闸兜底（stale 页面/裸 API 传 `wsl` 直接报错），探测中轮询不再叠加同步重探
-- **README/发行形态说明**：前置要求新增 gdb 可选项 bullet（仅动态调试需要），便携版说明注明其只覆盖静态链、动态调试始终需宿主自备 gdb
 
 ## [0.4.2] — 2026-11-15
 
