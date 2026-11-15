@@ -1,0 +1,46 @@
+name: publish
+
+# 发新版的全部动作 = `gh release create vX.Y.Z`。
+# Release 发布事件触发本 workflow：自动构建 → 产物挂回 Release → 上传 PyPI。
+# PyPI 侧走 Trusted Publishing（OIDC），无需任何 API token；
+# pending publisher 的 owner/repo/workflow/environment 必须与本文件逐字一致。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只构建不上传 PyPI（验证 pipeline 用）"
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # 必须与 PyPI 侧 pending publisher 的 Environment 字段一致（"pypi"）
+    environment: pypi
+    permissions:
+      id-token: write # OIDC 身份——trusted publishing 免 token 的关键
+      contents: write # 把构建产物挂回 GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build sdist + wheel
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload dist to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
+
+      - name: Publish to PyPI
+        # release 事件必发；手动 dispatch 尊重 dry_run 开关
+        if: github.event_name != 'workflow_dispatch' || inputs.dry_run != true
+        uses: pypa/gh-action-pypi-publish@release/v1
