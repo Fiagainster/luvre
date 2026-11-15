@@ -135,9 +135,9 @@
           <button class="btn btn-ghost btn-xs" id="hex-next" data-i18n="hex.next">next ▸</button>
           <input id="hex-offset" type="text" spellcheck="false" data-i18n-ph="hex.offset.ph" placeholder="offset" class="mini-input"/>
           <button class="btn btn-ghost btn-xs" id="hex-go" data-i18n="hex.go">read</button>
-          <button class="btn btn-ghost btn-xs" id="hex-send" data-i18n-title="hex.send.title" title="send to decoder">⚗</button>
-          <button class="btn btn-ghost btn-xs" id="hex-disasm" data-i18n-title="hex.disasm.title" title="raw-disassemble from here">⚡</button>
-          <button class="btn btn-ghost btn-xs" id="hex-copy" data-i18n-title="hex.copy.title" title="copy this page as hexdump">⧉</button>
+          <button class="btn btn-ghost btn-xs" id="hex-send" data-i18n="hex.send" data-i18n-title="hex.send.title" title="send to decoder">⚗ decode</button>
+          <button class="btn btn-ghost btn-xs" id="hex-disasm" data-i18n="hex.disasm" data-i18n-title="hex.disasm.title" title="raw-disassemble from here">⚡ disasm</button>
+          <button class="btn btn-ghost btn-xs" id="hex-copy" data-i18n="hex.copy" data-i18n-title="hex.copy.title" title="copy this page as hexdump">⧉ copy</button>
           <span class="code-title" id="hex-info"></span>
         </div>
         <div class="code" id="code-hex"><div class="code-empty" data-i18n="hex.empty">pick a memory block and read it raw</div></div>
@@ -320,7 +320,7 @@
         <div class="dec-col">
           <div class="dec-label"><span data-i18n="dec.output">output</span> <span class="dim" id="dec-out-size"></span>
             <label class="chk"><input type="checkbox" id="dec-show-hex"><span data-i18n="dec.hexview">hex view</span></label>
-            <select id="dec-enc" class="mini-input" title="文本显示编码（Latin-1 逐字节保真，GBK 用于中文样本）">
+            <select id="dec-enc" class="mini-input" title="输出显示编码">
               <option value="utf-8">UTF-8</option>
               <option value="gbk">GBK</option>
               <option value="latin1">Latin-1</option>
@@ -331,7 +331,15 @@
           <div class="dec-log" id="dec-log"></div>
         </div>
       </div>
-      <div id="xor-results" class="xor-results"></div>
+      <div id="xor-results" class="xor-results">
+        <div class="xor-head">
+          <span data-i18n="xor.results.title">XOR results</span>
+          <span class="dim" id="xor-count"></span>
+          <span class="spring"></span>
+          <button class="btn btn-ghost btn-xs" id="xor-close" data-i18n="xor.close" title="close">✕ close</button>
+        </div>
+        <div id="xor-rows"></div>
+      </div>
     </div>
 
     <!-- search -->

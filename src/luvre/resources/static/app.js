@@ -1691,17 +1691,20 @@ function renderDecOutput(bytes) {
 async function xorBrute() {
   const input = decInputBytes();
   const box = $("#xor-results");
+  const rowsBox = $("#xor-rows") || box;
   try {
     const res = await api("xor/brute", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input_b64: bytesToB64(input) }),
     });
     box.classList.add("show");
-    box.innerHTML = res.items.length
+    const count = $("#xor-count");
+    if (count) count.textContent = res.items.length || "";
+    rowsBox.innerHTML = res.items.length
       ? res.items.map((r) =>
           `<div class="xor-row" tabindex="0" data-key="${r.key}"><span class="xor-key">${esc(r.key_hex)}</span><span class="xor-score">${r.score}</span><span class="xor-preview">${esc(r.preview)}</span></div>`).join("")
       : `<div class="insp-empty">${esc(t("xor.none.brute"))}</div>`;
-    box.querySelectorAll(".xor-row").forEach((row) =>
+    rowsBox.querySelectorAll(".xor-row").forEach((row) =>
       row.onclick = () => {
         // dataset carries the decimal key; feed the xor op its hex form (B5 radix)
         S.ops = [{ op: "xor", args: { key: Number(row.dataset.key).toString(16), hex: true } }];
@@ -1715,17 +1718,20 @@ async function xorDerive() {
   if (!prefix) { toast(t("toast.prefix"), "info"); return; }
   const input = decInputBytes();
   const box = $("#xor-results");
+  const rowsBox = $("#xor-rows") || box;
   try {
     const res = await api("xor/derive", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input_b64: bytesToB64(input), prefix }),
     });
     box.classList.add("show");
-    box.innerHTML = res.items.length
+    const count = $("#xor-count");
+    if (count) count.textContent = res.items.length || "";
+    rowsBox.innerHTML = res.items.length
       ? res.items.map((r) =>
           `<div class="xor-row" tabindex="0"><span class="xor-key">len ${r.length}</span><span class="xor-score">${r.key_ascii ? "ascii" : "hex"}</span><span class="xor-preview">${esc(r.key_display)}</span></div>`).join("")
       : `<div class="insp-empty">${esc(t("xor.none.derive"))}</div>`;
-    box.querySelectorAll(".xor-row").forEach((row, i) =>
+    rowsBox.querySelectorAll(".xor-row").forEach((row, i) =>
       row.onclick = () => {
         const r = res.items[i];
         // key_bytes is always the hex encoding; prefer the readable ascii form
@@ -2875,6 +2881,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     sendToDecoder(S.selectedString, "text");
   };
   $("#btn-xor-brute").onclick = xorBrute;
+  // ✕ 关闭：清空结果并收起结果区（之前没有任何关闭手段）
+  $("#xor-close").onclick = () => {
+    $("#xor-results").classList.remove("show");
+    const rows = $("#xor-rows");
+    if (rows) rows.innerHTML = "";
+    const count = $("#xor-count");
+    if (count) count.textContent = "";
+  };
   $("#btn-xor-derive").onclick = xorDerive;
   $("#dec-presets").addEventListener("click", (e) => {
     const b = e.target.closest("[data-preset]");
