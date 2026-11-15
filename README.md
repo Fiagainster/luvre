@@ -1,4 +1,4 @@
-# lovelyreverse
+# luvre
 
 > **手搓向的逆向工程工作站** — PyGhidra 驱动 Ghidra 引擎，界面专为手工分析 / CTF 解题设计。
 > **No AI inside.** 这个工具不替你思考——它让你思考得更快。
@@ -6,13 +6,13 @@
 > A hands-on reverse-engineering workstation powered by the Ghidra engine, built for manual analysis and CTF work. No AI — the tool doesn't think for you, it makes you think faster.
 
 <p align="center">
-  <img src="docs/screenshots/workstation.png" width="96%" alt="lovelyreverse workstation — decompile view">
+  <img src="docs/screenshots/workstation.png" width="96%" alt="luvre workstation — decompile view">
   <br/>
   <em>Workstation — string anchor → xref → the exact decompile line highlighted; packer verdict & entropy bars in the inspector</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/callgraph.png" width="96%" alt="lovelyreverse call graph">
+  <img src="docs/screenshots/callgraph.png" width="96%" alt="luvre call graph">
   <br/>
   <em>Call graph — Ghidra-style hierarchical layout: callers above, callees below, double-click to expand</em>
 </p>
@@ -23,10 +23,14 @@
 函数列表 → 伪代码 → 汇编 → 内存十六进制 → 交叉引用 → 调用图 → 解码实验室 → ⚙ 动态调试 → 解题。
 反编译被混淆打断时，⚡ 裸反汇编按真实执行流把原始字节直接解成人话。
 
-名字里的 ♥（lovely + reverse）就是这个项目的态度：逆向是手艺活，工具应该像一把顺手的刻刀，而不是一个代劳的黑盒。
+名字 **luvre** = luv（爱心的 ♥）+ re（reverse engineering），读作「卢浮宫」——把二进制当藏品，摆在解剖台上细细观摩：逆向是手艺活，工具应该像一把顺手的刻刀，而不是一个代劳的黑盒。
+
+> v0.4.2 前曾名 **lovelyreverse**。取证圈已有成名的 Lovely* 工具系列（LovelyMem 等），
+> 同社区同前缀容易让人误会是一家的，故更名；CLI `lvr`、端口 7331 均不变，
+> 数据目录首次运行自动从旧名迁移，≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。
 
 <p align="center">
-  <img src="docs/screenshots/hero.png" width="60%" alt="lovelyreverse empty state">
+  <img src="docs/screenshots/hero.png" width="60%" alt="luvre empty state">
 </p>
 
 ## 功能
@@ -61,7 +65,7 @@
 - **APK 静态分析**：zip 解包落盘 `_lvr/unpacked_apk/` + **dex string pool 提取**（类名/URL/密钥，一键复制/送解码实验室）。
 
 <p align="center">
-  <img src="docs/screenshots/decoder.png" width="96%" alt="lovelyreverse decoder lab">
+  <img src="docs/screenshots/decoder.png" width="96%" alt="luvre decoder lab">
   <br/>
   <em>Decoder lab — chained ops: hex ciphertext → XOR 0x17 → XOR "ATRI" → flag, in the default light theme</em>
 </p>
@@ -138,32 +142,32 @@
 
 **方式一：从 GitHub Release 安装（推荐）**
 
-到 [Releases](https://github.com/Fiagainster/lovelyreverse/releases) 下载最新的 `.whl`，然后：
+到 [Releases](https://github.com/Fiagainster/luvre/releases) 下载最新的 `.whl`，然后：
 
 ```bash
-pip install lovelyreverse-0.4.2-py3-none-any.whl
+pip install lovelyreverse-0.4.2-py3-none-any.whl  # ≤0.4.2 的发行包沿用旧名
 lvr serve
 ```
 
 **方式二：从源码安装**
 
 ```bash
-git clone https://github.com/Fiagainster/lovelyreverse.git
-cd lovelyreverse
+git clone https://github.com/Fiagainster/luvre.git
+cd luvre
 pip install -e .
 ```
 
 > 依赖极简：只有 `pyghidra`（Ghidra 桥）和 `capstone`（裸反汇编的指令解码）两个第三方依赖——HTTP 服务是 stdlib 手写的，前端是原生 JS，离线可用。
-> PyPI 发布准备中（`pip install lovelyreverse`）。
+> PyPI 发布准备中（`pip install luvre`）。
 
 ### 启动
 
 ```bash
 lvr serve
 # 或
-python -m lovelyreverse serve
+python -m luvre serve
 # 裸命令也可以（默认子命令就是 serve）
-python -m lovelyreverse
+python -m luvre
 ```
 
 浏览器自动打开 `http://127.0.0.1:7331`。界面默认**中文 + 浅色主题**（右上角 ⚙ 设置里可切 English / 石墨玫瑰暗色）。三种打开方式：拖文件进页面 / 点 ⌖ 打开二进制 / **粘贴绝对路径回车**。拖入和文件选择走浏览器上传（浏览器拿不到文件的原始位置），会复制到数据目录再分析；**粘贴绝对路径则就地分析**——Ghidra 工程 `_lvr/` 建在样本旁边，不动你的文件。第一次打开一个样本需要跑 Ghidra 自动分析（小文件几十秒），之后秒开。
@@ -201,7 +205,7 @@ lvr doctor
 
 ```
 拿到 crackme.exe
-  ↓ 拖进 lovelyreverse
+  ↓ 拖进 luvre
 分析完成 → inspector 里看熵值（加壳？）、Overlay（有附加数据？）、加密常量（AES？TEA？）
   ↓ strings 面板搜 "flag" / "correct" / "wrong"
 点字符串 → xrefs 找到比对函数 → 伪代码读算法
@@ -218,7 +222,7 @@ flag 到手
                           零依赖，静态文件+JSON API        单线程任务队列（Ghidra 非线程安全）
 ```
 
-- **EngineManager**（`src/lovelyreverse/engine/manager.py`）：JVM 所有权 + 单 worker 线程串行化所有 Ghidra 调用；Ghidra 工程建在**样本同级的 `_lvr/` 目录**（`<样本目录>/_lvr/<程序名>.gpr`，二次打开秒级复用分析结果），目录不可写或设置 `LVR_PROJECT_DIR` 时回退到 `~/.lovelyreverse/projects`
+- **EngineManager**（`src/luvre/engine/manager.py`）：JVM 所有权 + 单 worker 线程串行化所有 Ghidra 调用；Ghidra 工程建在**样本同级的 `_lvr/` 目录**（`<样本目录>/_lvr/<程序名>.gpr`，二次打开秒级复用分析结果），目录不可写或设置 `LVR_PROJECT_DIR` 时回退到 `~/.luvre/projects`
 - **零依赖 HTTP 层**（`server/app.py`）：正则路由 + 任务农场（打开/批量反编译为后台 job，前端轮询）+ 带耗时的请求日志
 - **纯逻辑层**（`util/`）：`decode.py`（30 ops）、`xor.py`（爆破/推钥）、`binfile.py`（PE/ELF/熵/overlay，无任何依赖）
 - **签名库**（`engine/constants.py`）：声明式签名表，DWORD 类自动生成 BE/LE 变体

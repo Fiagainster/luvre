@@ -2,12 +2,12 @@
 
 import os
 
-from lovelyreverse.util.xor import xor_derive, xor_full_decode, xor_single_brute
+from luvre.util.xor import xor_derive, xor_full_decode, xor_single_brute
 
 
 class TestScoring:
     def test_printable_english_scores_high(self):
-        from lovelyreverse.util.xor import _score
+        from luvre.util.xor import _score
 
         english = b"the quick brown fox jumps over the lazy dog"
         noise = bytes(range(256)) * 2
@@ -15,7 +15,7 @@ class TestScoring:
         assert _score(noise) < 40
 
     def test_empty_scores_zero(self):
-        from lovelyreverse.util.xor import _score
+        from luvre.util.xor import _score
 
         assert _score(b"") == 0.0
 

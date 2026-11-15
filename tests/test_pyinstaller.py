@@ -6,7 +6,7 @@ import zlib
 
 import pytest
 
-from lovelyreverse.util.pyinstaller import NotPyInstaller, detect, unpack
+from luvre.util.pyinstaller import NotPyInstaller, detect, unpack
 
 MAGIC = b"MEI\014\013\012\013\016"
 PY37_MAGIC = b"\x42\x0d\x0d\x0a"

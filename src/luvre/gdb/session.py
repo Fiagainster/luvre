@@ -26,7 +26,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from lovelyreverse.gdb.mi import (
+from luvre.gdb.mi import (
     format_register_values,
     parse_breakpoint_table,
     parse_mi_line,

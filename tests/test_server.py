@@ -10,7 +10,7 @@ import urllib.request
 
 import pytest
 
-from lovelyreverse.server.app import AppState, serve
+from luvre.server.app import AppState, serve
 
 
 class StubEngine:
@@ -146,7 +146,7 @@ def get_raw(base: str, path: str):
 class TestBasics:
     def test_index_served(self, server):
         status, body = get_raw(server, "/")
-        assert status == 200 and b"lovelyreverse" in body
+        assert status == 200 and b"luvre" in body
 
     def test_status(self, server):
         status, data = get(server, "/api/status")
@@ -294,7 +294,7 @@ class TestApkUnpack:
 class TestGdbRoutes:
     def attach(self, server, monkeypatch=None):
         # reach into the handler's app state via a fresh session
-        from lovelyreverse.server.app import AppState
+        from luvre.server.app import AppState
         # the server fixture creates AppState internally; use the exposed hooks
         # by starting a session through the API with a stub injected instead
         sess = StubGdbSession()
@@ -332,7 +332,7 @@ class TestGdbEnvAdaptive:
     """Host-adaptive transport surface (POSIX must never touch WSL)."""
 
     def test_wsl_start_refused_on_posix(self, monkeypatch):
-        from lovelyreverse.gdb.session import GdbError
+        from luvre.gdb.session import GdbError
         st = AppState(StubEngine())
         monkeypatch.setattr(os, "name", "posix")
         with pytest.raises(GdbError, match="wsl transport requires"):
@@ -341,7 +341,7 @@ class TestGdbEnvAdaptive:
     def test_wsl_start_allowed_on_windows(self, monkeypatch):
         # the guard passes on nt — the call then fails on "no program loaded",
         # which proves it got past the transport check
-        from lovelyreverse.gdb.session import GdbError
+        from luvre.gdb.session import GdbError
         st = AppState(StubEngine())
         monkeypatch.setattr(os, "name", "nt")
         with pytest.raises(GdbError, match="no program loaded"):

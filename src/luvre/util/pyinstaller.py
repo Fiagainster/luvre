@@ -3,7 +3,7 @@
 Ported from extremecoders-re/pyinstxtractor v2.0 (GPLv3) — that project's
 notice is preserved here: https://github.com/extremecoders-re/pyinstxtractor
 
-Adaptations for lovelyreverse:
+Adaptations for luvre:
 * no chdir / no prints — returns a JSON-friendly manifest instead
 * tolerant of malformed TOC entries (warn, don't assert)
 * extraction goes into an explicit outdir with path-traversal guards
@@ -370,9 +370,9 @@ def _extract_pyz(
     return count, pyc_magic
 
 
-if __name__ == "__main__":  # quick manual use: python -m lovelyreverse.util.pyinstaller file.exe
+if __name__ == "__main__":  # quick manual use: python -m luvre.util.pyinstaller file.exe
     if len(sys.argv) < 2:
-        print("usage: python -m lovelyreverse.util.pyinstaller <packed.exe>")
+        print("usage: python -m luvre.util.pyinstaller <packed.exe>")
         sys.exit(2)
     info = detect(sys.argv[1])
     print("detect:", info)

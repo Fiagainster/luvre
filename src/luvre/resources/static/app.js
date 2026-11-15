@@ -1,4 +1,4 @@
-/* lovelyreverse workstation UI — vanilla JS, no dependencies */
+/* luvre workstation UI — vanilla JS, no dependencies */
 "use strict";
 
 /* ═══════════════════════ tiny helpers ═══════════════════════ */
@@ -2682,7 +2682,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // boot status (B2: show progress while auto-analysis is still running)
   try {
     const st = await api("status");
-    $("#st-version").textContent = "lovelyreverse v" + st.version;
+    $("#st-version").textContent = "luvre v" + st.version;
     if (st.analyzing) {
       engineState("busy");
       $("#st-job").textContent = st.progress || t("engine.analyzing");

@@ -3,7 +3,7 @@
 import os
 import struct
 
-from lovelyreverse.util.binfile import (
+from luvre.util.binfile import (
     entropy_profile,
     file_hashes,
     parse_elf,

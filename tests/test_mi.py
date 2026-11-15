@@ -1,6 +1,6 @@
 """Unit tests for the GDB/MI line parser."""
 
-from lovelyreverse.gdb.mi import parse_mi_line, parse_stopped, parse_breakpoint_table, format_register_values
+from luvre.gdb.mi import parse_mi_line, parse_stopped, parse_breakpoint_table, format_register_values
 
 
 class TestClassify:

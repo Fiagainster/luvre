@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lovelyreverse"
+name = "luvre"
 version = "0.4.2"
 description = "A hands-on reverse-engineering workstation powered by the Ghidra engine. 手搓向逆向工程工作站。"
 readme = "README.md"
@@ -35,16 +35,16 @@ dev = [
 ]
 
 [project.scripts]
-lvr = "lovelyreverse.cli:main"
+lvr = "luvre.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Fiagainster/lovelyreverse"
+Homepage = "https://github.com/Fiagainster/luvre"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-lovelyreverse = ["resources/static/*"]
+luvre = ["resources/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

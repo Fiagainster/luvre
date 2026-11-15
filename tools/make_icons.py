@@ -1,12 +1,18 @@
-"""Derive the final icon set for lovelyreverse from the chosen candidate.
+"""Derive the final icon set for luvre from the chosen candidate.
 
 Input : assets/icons/candidate-A-heart-sprite.png (2K master, badge on light bg)
 Output: assets/icons/master-rounded.png            1024px working master (rounded alpha)
-        src/lovelyreverse/resources/static/favicon.ico       16-256 multi-size
-        src/lovelyreverse/resources/static/favicon-32.png
-        src/lovelyreverse/resources/static/apple-touch-icon.png  (180, opaque full-bleed)
+        src/luvre/resources/static/favicon.ico       16-256 multi-size
+        src/luvre/resources/static/favicon-32.png
+        src/luvre/resources/static/apple-touch-icon.png  (180, opaque full-bleed)
         docs/icons/social-preview.png              1280x640 README/GitHub banner
+
+`python tools/make_icons.py banner` regenerates ONLY the social banner from
+the existing master (used for the lovelyreverse → luvre rename — the heart
+mascot itself is name-agnostic and stays).
 """
+
+import sys
 
 from pathlib import Path
 
@@ -14,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "icons" / "candidate-A-heart-sprite.png"
-STATIC = ROOT / "src" / "lovelyreverse" / "resources" / "static"
+STATIC = ROOT / "src" / "luvre" / "resources" / "static"
 DOCS = ROOT / "docs" / "icons"
 
 ROSE = (255, 93, 143)
@@ -65,26 +71,11 @@ def save_opaque(master: Image.Image, size: int, path: Path) -> None:
     flat.resize((size, size), Image.LANCZOS).save(path)
 
 
-def main() -> None:
-    img = Image.open(SRC)
-    bbox = badge_bbox(img)
-    print(f"badge bbox: {bbox} of {img.size}")
-    badge = img.crop(bbox)
-    master = rounded(badge).resize((1024, 1024), Image.LANCZOS)
-    master_path = ROOT / "assets" / "icons" / "master-rounded.png"
-    master.save(master_path)
-
+def build_banner(master: Image.Image) -> None:
+    """Social preview 1280x640 — two-tone wordmark over the mascot."""
     STATIC.mkdir(parents=True, exist_ok=True)
     DOCS.mkdir(parents=True, exist_ok=True)
 
-    # favicon.ico — multi-size
-    master.save(STATIC / "favicon.ico",
-                sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    # favicon pngs
-    master.resize((32, 32), Image.LANCZOS).save(STATIC / "favicon-32.png")
-    save_opaque(master, 180, STATIC / "apple-touch-icon.png")
-
-    # ── social preview 1280x640 ────────────────────────────────────────
     W, H = 1280, 640
     banner = Image.new("RGB", (W, H), CREAM)
     d = ImageDraw.Draw(banner)
@@ -96,7 +87,7 @@ def main() -> None:
     banner = Image.composite(rose_layer, banner, glow)
     d = ImageDraw.Draw(banner)
 
-    icon = master.resize((420, 420), Image.LANCZOS)
+    icon = master.convert("RGBA").resize((420, 420), Image.LANCZOS)
     banner.paste(icon, (78, (H - 420) // 2), icon)
 
     tx = 540
@@ -116,17 +107,18 @@ def main() -> None:
             s -= 2
         return ImageFont.truetype(path, 12)
 
-    f_brand = fit("lovelyreverse", CASCADIA, 84, stroke=2)
+    f_brand = fit("luvre", CASCADIA, 84, stroke=2)
     f_tag_cn = fit("手搓向的逆向工程工作站 · no AI", MSYH, 38)
     f_tag_en = fit("decompile · call graph · decoder lab · crypto constants",
                    CASCADIA, 26)
     f_hex = ImageFont.truetype(CASCADIA, 22)
 
     y = 196
-    w1 = d.textbbox((0, 0), "lovely", font=f_brand, stroke_width=2)[2]
-    d.text((tx, y), "lovely", font=f_brand, fill=GRAPHITE,
+    # two-tone wordmark: luv = the heart, re = reverse engineering
+    w1 = d.textbbox((0, 0), "luv", font=f_brand, stroke_width=2)[2]
+    d.text((tx, y), "luv", font=f_brand, fill=GRAPHITE,
            stroke_width=2, stroke_fill=GRAPHITE)
-    d.text((tx + w1, y), "reverse", font=f_brand, fill=ROSE,
+    d.text((tx + w1, y), "re", font=f_brand, fill=ROSE,
            stroke_width=2, stroke_fill=ROSE)
     y += 122
     d.text((tx, y), "手搓向的逆向工程工作站 · no AI", font=f_tag_cn, fill=GRAPHITE)
@@ -138,9 +130,39 @@ def main() -> None:
            font=f_hex, fill=(230, 170, 192))
 
     banner.save(DOCS / "social-preview.png")
+    print("written:", DOCS / "social-preview.png")
+
+
+def main() -> None:
+    master_path = ROOT / "assets" / "icons" / "master-rounded.png"
+    if len(sys.argv) > 1 and sys.argv[1] == "banner":
+        # rename path: reuse the existing master, regenerate the banner only
+        if not master_path.exists():
+            raise SystemExit("banner mode needs assets/icons/master-rounded.png")
+        build_banner(Image.open(master_path))
+        return
+
+    img = Image.open(SRC)
+    bbox = badge_bbox(img)
+    print(f"badge bbox: {bbox} of {img.size}")
+    badge = img.crop(bbox)
+    master = rounded(badge).resize((1024, 1024), Image.LANCZOS)
+    master.save(master_path)
+
+    STATIC.mkdir(parents=True, exist_ok=True)
+    DOCS.mkdir(parents=True, exist_ok=True)
+
+    # favicon.ico — multi-size
+    master.save(STATIC / "favicon.ico",
+                sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    # favicon pngs
+    master.resize((32, 32), Image.LANCZOS).save(STATIC / "favicon-32.png")
+    save_opaque(master, 180, STATIC / "apple-touch-icon.png")
+
+    build_banner(master)
     print("written:")
     for p in [master_path, STATIC / "favicon.ico", STATIC / "favicon-32.png",
-              STATIC / "apple-touch-icon.png", DOCS / "social-preview.png"]:
+              STATIC / "apple-touch-icon.png"]:
         print(" ", p)
 
 

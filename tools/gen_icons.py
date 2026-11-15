@@ -1,4 +1,4 @@
-"""Generate cute icon candidates for lovelyreverse via Volcengine Ark (doubao-seedream).
+"""Generate cute icon candidates for luvre via Volcengine Ark (doubao-seedream).
 
 Reads ARK_API_KEY from ./.env (never commit that file). Saves PNGs to assets/icons/.
 

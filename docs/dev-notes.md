@@ -52,9 +52,9 @@
 
 ### 工程目录迁移：样本同级 `_lvr/`（C 盘不再增长）
 
-用户反馈：每次打开二进制都在往 C 盘复制项目（`~/.lovelyreverse/projects`）。现改为**每个样本一个独立工程，建在样本文件同级目录**：`<样本目录>/_lvr/<程序名>.gpr|.rep`。
+用户反馈：每次打开二进制都在往 C 盘复制项目（`~/.luvre/projects`）。现改为**每个样本一个独立工程，建在样本文件同级目录**：`<样本目录>/_lvr/<程序名>.gpr|.rep`。
 
-- `_project_for(src)`：可写性探针（mkdir + 写删测试文件）失败 → 回退中央目录（`~/.lovelyreverse/projects/main`）；`LVR_PROJECT_DIR` 或显式 `project_dir_path`（测试用）强制走中央目录。
+- `_project_for(src)`：可写性探针（mkdir + 写删测试文件）失败 → 回退中央目录（`~/.luvre/projects/main`）；`LVR_PROJECT_DIR` 或显式 `project_dir_path`（测试用）强制走中央目录。
 - 程序名来自 `_safe_project_name(src.stem)`：只留 `[A-Za-z0-9_.-]`，非 ASCII/超长 → `"p_" + sha1(stem)[:10]`（中文样本名也能落盘）。
 - `/api/program` 新增 `project_dir` 字段，inspector「程序信息」显示工程目录行（用户能看到工程建在哪）。
 - 二次打开同一样本 = 打开已有 `.gpr` 直接 openProgram，秒级——分析结果就地复用，与样本同进退（删样本目录即清理）。
@@ -75,7 +75,7 @@
 1. **常量扫描弱签名**：4 字节签名（如 `AES Rcon[1..4] (BE)`、`CRC-32 poly (LE)`）在任意样本上可能巧合命中（crackme_easy、flower、NotNormalExe 均有此类误报）。constants.py 目前没有最短长度过滤。
    - **续作方向**：length < 8 的命中标 `weak: true`，前端弱化显示；或要求命中处上下文有附加结构（如 Rcon 后跟 S-box）。
 2. **IAB（ZCode 内置浏览器）的 Playwright `press("Enter")` 不触发页面 keydown**：合成 `KeyboardEvent` 正常。真实浏览器不受影响（synthetic 与 trusted 事件都会触发 handler）。自动化测试该用 `dispatchEvent`。
-3. **pyghidra 启动间歇失败（~1/3 概率）**：`_GhidraBundleFinder.find_spec` 递归爆栈（launcher.py:116 无条件 `from ghidra.framework import Application`）。两个诱因：`%TEMP%` 下残留空 `ghidra/` 目录会遮蔽 `import ghidra`（已删）；脚本从 %TEMP% 直接跑也易触发。**从仓库 cwd 用 `python -m lovelyreverse serve` 或 `python -c "exec(...)"` 启动可靠**。另：jpype 的 atexit 钩子是 `_core._JTerminate` 而非 `shutdownJVM`，两者都要 unregister 才不挂死退出（manager.shutdown 已修）。
+3. **pyghidra 启动间歇失败（~1/3 概率）**：`_GhidraBundleFinder.find_spec` 递归爆栈（launcher.py:116 无条件 `from ghidra.framework import Application`）。两个诱因：`%TEMP%` 下残留空 `ghidra/` 目录会遮蔽 `import ghidra`（已删）；脚本从 %TEMP% 直接跑也易触发。**从仓库 cwd 用 `python -m luvre serve` 或 `python -c "exec(...)"` 启动可靠**。另：jpype 的 atexit 钩子是 `_core._JTerminate` 而非 `shutdownJVM`，两者都要 unregister 才不挂死退出（manager.shutdown 已修）。
 
 （原「截图角标待重拍」已解决：2026-11-11 用 browser-use 后台直存重拍五张 v0.3.0 截图，顺带修掉两个 drawer 布局 bug，见踩坑 #12。）
 
@@ -137,7 +137,7 @@
 
 ## 开发环境备忘
 
-- 启动开发服务器：`GHIDRA_INSTALL_DIR="D:/SecurityTools/ghidra_12.2_PUBLIC" python -m lovelyreverse serve --no-browser --port 7331`
+- 启动开发服务器：`GHIDRA_INSTALL_DIR="D:/SecurityTools/ghidra_12.2_PUBLIC" python -m luvre serve --no-browser --port 7331`
 - 本机 Ghidra：`D:/SecurityTools/ghidra_12.2_PUBLIC`；gcc：`D:\System\mingw64\bin\gcc`（16.2.0）
 - 测试样本：`D:\Project\网安训练\学习笔记\逆向\逆向题\challenge1\challenge1.exe`（mingw PE，116 fn / 280 strings）
 - 加密夹具：`tests/fixtures/crypto_demo.c`（gcc 编译，含 AES S-box/SHA-256 K/TEA δ/Base64 表）
@@ -246,7 +246,7 @@
 
 上一节 KeygenMe 的「结论」当天就被推翻了——HEX 手解码虽然可靠，但要人脑模拟 CPU。既然路径规则是明确的（无条件 JMP 跟目标、CALL-实为-JMP 丢返回、垃圾字节是反调试），就该让工具代劳。新增 **⚡ 裸反汇编** 页签：
 
-**设计**（`src/lovelyreverse/disasm.py` 纯 capstone 模块，引擎只负责读内存字节）：
+**设计**（`src/luvre/disasm.py` 纯 capstone 模块，引擎只负责读内存字节）：
 
 - 线性扫描 + 显式流策略：无条件直接 JMP → 跟随目标（永不 fall-through）；条件跳转 → 走 fall-through（反调试的 JAE/JA 进垃圾由下面的恢复机制兜底）
 - **CALL-实为-JMP 签名**：callee 第一条是**向后**的直接 JMP → 视为混淆（真实 callee = `eb rel8` 回跳到 `ADD ESP,4` 丢返回簇）→ 跟进 callee，把压栈返回地址标记为「死返回」跳过；普通 CALL 走 fall-through
@@ -337,7 +337,7 @@ S 取低 8 位再加字节。凡 rol/ror 之后，cl/ch/dl 都混进了别处的
 | g | gdb stdin 何时投递不明确 | placeholder 含糊 | 注明「仅会话启动时投递一次，改动需重启会话」 |
 | l | HEX 输绝对地址 0x08049120 → ram:10091120 倍地址读失败 | unmapped 地址被当块内偏移原样发送 | 前端先定位所属块换算；查不到 → toast 列出可读范围，不发注定失败的请求 |
 | m | 切样本后 gdb 会话仍指旧程序，「启动」点击被 already active 吞掉 | 会话存活跨页面刷新 | 后端按 normcase 比对程序路径自动重启；前端 unhide 启动钮 + stale toast |
-| n | 裸 `python -m lovelyreverse` AttributeError | 顶层 Namespace 没有 serve 子命令默认值 | _normalize_argv 补 serve 前缀（白名单 -h/--help/--version 放行） |
+| n | 裸 `python -m luvre` AttributeError | 顶层 Namespace 没有 serve 子命令默认值 | _normalize_argv 补 serve 前缀（白名单 -h/--help/--version 放行） |
 | o | wsl 探测炸 Popen reader 线程（#29） | text=True 按 GBK 严格解码 UTF-8 stderr | 显式 encoding/errors，三处 spawn 全量排查 |
 
 ## CI 平台兼容补丁（2026-11-15，v0.4.2 后）

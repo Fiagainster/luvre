@@ -37,7 +37,7 @@ def crypto_exe(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def engine(crypto_exe, tmp_path_factory):
-    from lovelyreverse.engine.manager import EngineManager
+    from luvre.engine.manager import EngineManager
 
     # own project dir: the running workstation (if any) locks the default one
     em = EngineManager(

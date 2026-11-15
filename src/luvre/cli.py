@@ -1,4 +1,4 @@
-"""Command line entry: `lvr serve`, `lvr doctor` (also `python -m lovelyreverse`)."""
+"""Command line entry: `lvr serve`, `lvr doctor` (also `python -m luvre`)."""
 
 from __future__ import annotations
 
@@ -8,22 +8,22 @@ import sys
 import threading
 import webbrowser
 
-from lovelyreverse import __version__
-from lovelyreverse.config import (
+from luvre import __version__
+from luvre.config import (
     DEFAULT_HOST,
     DEFAULT_PORT,
     find_java,
     resolve_ghidra_dir,
 )
-from lovelyreverse.engine.manager import EngineManager
-from lovelyreverse.server.app import AppState, serve
+from luvre.engine.manager import EngineManager
+from luvre.server.app import AppState, serve
 
 
 _TOP_LEVEL_FLAGS = {"-h", "--help", "--version"}
 
 
 def _normalize_argv(argv: list[str]) -> list[str]:
-    """Default subcommand plumbing: a bare `python -m lovelyreverse` (or a
+    """Default subcommand plumbing: a bare `python -m luvre` (or a
     bare `lvr`, or `lvr --no-browser`) must behave as `serve`.  Without this,
     the top-level Namespace reaches _cmd_serve without the serve subparser's
     defaults (--host/--port/--ghidra) and crashes with AttributeError."""
@@ -44,9 +44,9 @@ def main(argv: list[str] | None = None) -> int:
             pass
     parser = argparse.ArgumentParser(
         prog="lvr",
-        description="lovelyreverse - a hands-on reverse-engineering workstation powered by Ghidra.",
+        description="luvre - a hands-on reverse-engineering workstation powered by Ghidra.",
     )
-    parser.add_argument("--version", action="version", version=f"lovelyreverse {__version__}")
+    parser.add_argument("--version", action="version", version=f"luvre {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     p_serve = sub.add_parser("serve", help="start the workstation UI (default command)")
@@ -124,7 +124,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         )
         return 2
     url = f"http://{args.host}:{args.port}"
-    print(f"[*] lovelyreverse {__version__} serving at {url}")
+    print(f"[*] luvre {__version__} serving at {url}")
     print("[*] JVM will boot on first use; opening a binary starts auto-analysis.")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
@@ -142,7 +142,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     problems = 0
-    print(f"lovelyreverse doctor - v{__version__}")
+    print(f"luvre doctor - v{__version__}")
 
     v = sys.version_info
     if v >= (3, 10):
@@ -191,7 +191,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
         print("  [ok]   pyghidra importable")
     except Exception as e:  # noqa: BLE001 - report any import failure
-        print(f"  [FAIL] pyghidra import failed: {e}\n         reinstall: pip install lovelyreverse")
+        print(f"  [FAIL] pyghidra import failed: {e}\n         reinstall: pip install luvre")
         problems += 1
 
     if problems:

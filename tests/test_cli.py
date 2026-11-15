@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-import lovelyreverse.config as cfg
-from lovelyreverse.config import (
+import luvre.config as cfg
+from luvre.config import (
     find_ghidra_install_dir,
     parse_java_version,
     resolve_ghidra_dir,
@@ -97,13 +97,54 @@ class TestScan:
         assert find_ghidra_install_dir() == d2  # sorted() → lexicographic, 12.2 last
 
 
+class TestDataDir:
+    """data_dir() honors LVR_DATA_DIR and migrates the pre-rename directory."""
+
+    def test_env_override(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("LVR_DATA_DIR", str(tmp_path / "custom"))
+        assert cfg.data_dir() == tmp_path / "custom"
+
+    def test_migrates_pre_rename_dir(self, monkeypatch, tmp_path):
+        # ≤v0.4.2 stored data under %LOCALAPPDATA%/lovelyreverse (~/.lovelyreverse
+        # on POSIX); first run after the luvre rename must carry it over
+        old = tmp_path / ("lovelyreverse" if cfg.os.name == "nt" else ".lovelyreverse")
+        old.mkdir()
+        (old / "marker.txt").write_text("keep", encoding="utf-8")
+        monkeypatch.delenv("LVR_DATA_DIR", raising=False)
+        if cfg.os.name == "nt":
+            monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        else:
+            monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        d = cfg.data_dir()
+        assert d.name == "luvre"
+        assert (d / "marker.txt").read_text(encoding="utf-8") == "keep"
+        assert not old.exists()
+
+    def test_wins_over_stale_old_dir(self, monkeypatch, tmp_path):
+        # an existing new-name dir is authoritative — the old one is left alone
+        new = tmp_path / ("luvre" if cfg.os.name == "nt" else ".luvre")
+        new.mkdir()
+        (new / "fresh.txt").write_text("new", encoding="utf-8")
+        old = tmp_path / ("lovelyreverse" if cfg.os.name == "nt" else ".lovelyreverse")
+        old.mkdir()
+        (old / "stale.txt").write_text("old", encoding="utf-8")
+        monkeypatch.delenv("LVR_DATA_DIR", raising=False)
+        if cfg.os.name == "nt":
+            monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        else:
+            monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        d = cfg.data_dir()
+        assert (d / "fresh.txt").exists() and not (d / "stale.txt").exists()
+        assert old.exists()
+
+
 class TestNormalizeArgv:
-    """A bare `python -m lovelyreverse` used to reach _cmd_serve without the
+    """A bare `python -m luvre` used to reach _cmd_serve without the
     serve subparser's defaults and crash with AttributeError: 'Namespace'
     object has no attribute 'ghidra'."""
 
     def test_bare_defaults_to_serve(self):
-        from lovelyreverse.cli import _normalize_argv
+        from luvre.cli import _normalize_argv
         assert _normalize_argv([]) == ["serve"]
         assert _normalize_argv(["--no-browser"]) == ["serve", "--no-browser"]
         assert _normalize_argv(["--ghidra", "X"]) == ["serve", "--ghidra", "X"]
@@ -111,14 +152,14 @@ class TestNormalizeArgv:
             "serve", "--host", "127.0.0.1", "--port", "9"]
 
     def test_explicit_subcommands_pass_through(self):
-        from lovelyreverse.cli import _normalize_argv
+        from luvre.cli import _normalize_argv
         assert _normalize_argv(["serve"]) == ["serve"]
         assert _normalize_argv(["serve", "--port", "9"]) == ["serve", "--port", "9"]
         assert _normalize_argv(["doctor"]) == ["doctor"]
         assert _normalize_argv(["doctor", "--ghidra", "X"]) == ["doctor", "--ghidra", "X"]
 
     def test_top_level_flags_pass_through(self):
-        from lovelyreverse.cli import _normalize_argv
+        from luvre.cli import _normalize_argv
         assert _normalize_argv(["--version"]) == ["--version"]
         assert _normalize_argv(["-h"]) == ["-h"]
         assert _normalize_argv(["--help"]) == ["--help"]
@@ -126,7 +167,7 @@ class TestNormalizeArgv:
     def test_bare_main_parses_serve_defaults(self, monkeypatch):
         # main([]) must reach _cmd_serve with host/port/ghidra present —
         # stub out everything past parsing
-        import lovelyreverse.cli as cli
+        import luvre.cli as cli
 
         seen = {}
         monkeypatch.setattr(cli, "_cmd_serve", lambda args: seen.update(vars(args)) or 0)

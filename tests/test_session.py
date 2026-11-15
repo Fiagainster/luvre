@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from lovelyreverse.gdb.session import GdbSession, GdbError, parse_env_text, to_wsl_path
+from luvre.gdb.session import GdbSession, GdbError, parse_env_text, to_wsl_path
 
 FAKE = Path(__file__).parent / "fake_gdb.py"
 

@@ -61,7 +61,7 @@ if __name__ == "__main__":
     import sys
 
     sys.path.insert(0, r"D:\Project\lovelyreverse\src")
-    from lovelyreverse.util.dex import dex_info, dex_strings
+    from luvre.util.dex import dex_info, dex_strings
 
     blob = build_minidex(["Lcom/ctf/MainActivity;", "flag{dex_strings_ftw}", "https://evil.example/submit"])
     print(dex_info(blob))

@@ -23,10 +23,10 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
-from lovelyreverse import __version__
-from lovelyreverse.util.binfile import triage as file_triage
-from lovelyreverse.util.decode import OpError, run_chain
-from lovelyreverse.util.xor import xor_derive, xor_full_decode, xor_single_brute
+from luvre import __version__
+from luvre.util.binfile import triage as file_triage
+from luvre.util.decode import OpError, run_chain
+from luvre.util.xor import xor_derive, xor_full_decode, xor_single_brute
 
 STATIC_DIR = Path(__file__).parent.parent / "resources" / "static"
 
@@ -37,7 +37,7 @@ RECENT_CAP = 20
 # ---------------------------------------------------------------- recent list
 
 def _recent_file() -> Path:
-    from lovelyreverse.config import data_dir
+    from luvre.config import data_dir
 
     return data_dir() / "recent.json"
 
@@ -125,7 +125,7 @@ class AppState:
         self.file_bytes: bytes | None = None
         self.triage_info: dict[str, Any] | None = None
         self.source_path: str | None = None
-        self.gdb_session: Any = None          # lovelyreverse.gdb.session.GdbSession
+        self.gdb_session: Any = None          # luvre.gdb.session.GdbSession
         self._gdb_env_cache: dict[str, Any] = {}
         self._gdb_probing = False
 
@@ -169,7 +169,7 @@ class AppState:
 
     def _gdb_env_probe(self) -> dict[str, Any]:
         """The slow part of gdb_env — runs once, result lands in the cache."""
-        from lovelyreverse.gdb.session import find_local_gdb
+        from luvre.gdb.session import find_local_gdb
 
         local = find_local_gdb()
         wsl_ok = False
@@ -214,7 +214,7 @@ class AppState:
 
     def gdb_start(self, transport: str, distro: str, args: str, stdin_text: str,
                   env_text: str = "") -> dict[str, Any]:
-        from lovelyreverse.gdb.session import GdbSession, GdbError
+        from luvre.gdb.session import GdbSession, GdbError
 
         if transport == "wsl" and os.name != "nt":
             # the UI hides the option on POSIX hosts, but a stale page or a
@@ -275,7 +275,7 @@ class AppState:
 def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = f"lovelyreverse/{__version__}"
+        server_version = f"luvre/{__version__}"
 
         # ---------------------------------------------------------- plumbing
 
@@ -373,7 +373,7 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
             path, qs = url.path, parse_qs(url.query)
 
             if not path.startswith("/api/"):
-                if path == "/lovelyreverse.js.map":  # never
+                if path == "/luvre.js.map":  # never
                     self._error("not found", 404)
                     return
                 self._static(path)
@@ -693,7 +693,7 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 if length > MAX_BODY:
                     return self._error("file too large (32 MB limit)", 413)
                 blob = self.rfile.read(length)
-                from lovelyreverse.config import data_dir
+                from luvre.config import data_dir
 
                 samples = data_dir() / "samples"
                 samples.mkdir(parents=True, exist_ok=True)
@@ -798,7 +798,7 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                     return self._error(f"file not found: {src}")
 
                 def target(job: Job):
-                    from lovelyreverse.util.pyinstaller import unpack
+                    from luvre.util.pyinstaller import unpack
 
                     job.progress = "locating cookie"
                     # Unpack beside the sample (its _lvr/), not %TEMP% —
@@ -825,7 +825,7 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 def apk_target(job: Job):
                     import zipfile
 
-                    from lovelyreverse.util.dex import dex_info, dex_strings, looks_like_dex
+                    from luvre.util.dex import dex_info, dex_strings, looks_like_dex
 
                     job.progress = "opening zip container"
                     outdir = p.parent / "_lvr" / "unpacked_apk" / f"{p.stem}_{int(time.time())}"

@@ -20,7 +20,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
-from lovelyreverse.config import project_dir
+from luvre.config import project_dir
 
 T = TypeVar("T")
 
@@ -754,7 +754,7 @@ class EngineManager:
                 raise EngineError(f"nothing readable at 0x{addr_int:x}")
             raw = _read_bytes(mem, a.subtract(back), back + n)
             bits = int(program.getMinAddress().getAddressSpace().getSize())
-            from lovelyreverse.disasm import decode_trace
+            from luvre.disasm import decode_trace
 
             out = decode_trace(raw, addr_int - back, mode_bits=bits, entry=addr_int)
             out["block"] = str(block.getName())
@@ -897,7 +897,7 @@ class EngineManager:
         if self._blocks_cache is not None:
             return self._blocks_cache
         program = self._require_program()
-        from lovelyreverse.util.binfile import shannon_entropy
+        from luvre.util.binfile import shannon_entropy
 
         out = []
         for b in program.getMemory().getBlocks():
@@ -987,7 +987,7 @@ class EngineManager:
         """Run the FindCrypt-style scanner over all initialized memory."""
 
         def job():
-            from lovelyreverse.engine.constants import scan_bytes
+            from luvre.engine.constants import scan_bytes
 
             program = self._require_program()
             fm = program.getFunctionManager()

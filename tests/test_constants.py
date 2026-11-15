@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from lovelyreverse.engine.constants import SIGNATURES, scan_bytes
+from luvre.engine.constants import SIGNATURES, scan_bytes
 
 CATEGORIES = {"block-cipher", "stream-cipher", "hash", "encoding", "ecc", "misc"}
 

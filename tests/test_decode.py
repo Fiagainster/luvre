@@ -2,7 +2,7 @@
 
 import pytest
 
-from lovelyreverse.util.decode import OPS, OpError, run_chain
+from luvre.util.decode import OPS, OpError, run_chain
 
 
 class TestSingleOps:
@@ -87,7 +87,7 @@ class TestSingleOps:
         assert out == b"ABCD"
 
     def test_rc4_roundtrip(self):
-        from lovelyreverse.util.decode import op_rc4
+        from luvre.util.decode import op_rc4
 
         enc = op_rc4(b"secret message", key="key")
         assert op_rc4(enc, key="key") == b"secret message"

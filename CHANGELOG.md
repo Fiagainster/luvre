@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+### 变更
+
+- **项目更名 lovelyreverse → luvre**：取证圈已有成名的 Lovely* 工具系列（Tokeii0/LovelyMem 等），同社区同前缀易被误认为同族产品。luvre 读作卢浮宫（把二进制当藏品上台解剖），CLI `lvr` 与端口 7331 均不变；数据目录 `%LOCALAPPDATA%/luvre`（`~/.luvre`）首次运行自动从旧名迁移；≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。爱心吉祥物与配色不受影响（本就无字）
+
 ### 修复
 
 - **CI Ubuntu 全挂（v0.4.0 起三个版本）**：`mbcs` 是 Windows 专属 codec 名，io_encoding 原逻辑「wsl=utf-8 / 其余=mbcs」在 POSIX 上选到它必炸——ubuntu runner 自带真 gdb，本机传输真实可达，写 MI 行时 `LookupError: unknown encoding: mbcs`。改为一行条件：POSIX 一律 utf-8（dev-notes #31）
@@ -37,7 +41,7 @@
 
 ### 真题验证
 
-- **ch13**（884 B 裸 syscall 汇编，signal 链 + XOR 解密）：裸反汇编避花指令 + 解码实验室一条链解 484 B → 密码静态解出 → gdb 命令框放行 SIGTRAP 动态闭环（[writeup-ch13.md](https://github.com/Fiagainster/lovelyreverse/blob/main/docs/writeup-ch13.md)）
+- **ch13**（884 B 裸 syscall 汇编，signal 链 + XOR 解密）：裸反汇编避花指令 + 解码实验室一条链解 484 B → 密码静态解出 → gdb 命令框放行 SIGTRAP 动态闭环（[writeup-ch13.md](https://github.com/Fiagainster/luvre/blob/main/docs/writeup-ch13.md)）
 - **ch20.bin**（Root-Me 自哈希 crackme，732 B）：裸反汇编读出 syscall 骨架 → HEX 多页拉满 163 字节代码 → 页内算种子 **0xAC77E166** → 直推密码 **`HardW@re_Br3akPoiNT_r0ckS`** → gdb 桥喂 stdin 动态闭环成功
 - **ch18.bin**（VM opcode 型，5 KB）：纯 UI 解出；strace 实证程序任何输入下零 write——成败只能靠 gdb 内存确认（dev-notes #28）
 

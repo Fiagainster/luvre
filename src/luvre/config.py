@@ -8,7 +8,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-APP_NAME = "lovelyreverse"
+APP_NAME = "luvre"
+
+# The data directory carried the pre-rename brand (≤v0.4.2 was "lovelyreverse";
+# renamed away from the forensics scene's established Lovely* family).  Migrate
+# it once on first run so existing logs/projects survive the rename.
+_PRE_RENAME_APP = "lovelyreverse"
 
 # Default TCP port chosen to be memorable (leetspeak "7331").
 DEFAULT_HOST = "127.0.0.1"
@@ -18,16 +23,23 @@ DEFAULT_PORT = 7331
 def data_dir() -> Path:
     """Persistent app data directory (Ghidra projects, logs).
 
-    Honors LVR_DATA_DIR (portable installs / test isolation).
+    Honors LVR_DATA_DIR (portable installs / test isolation).  A leftover
+    pre-rename directory is renamed into place on first run.
     """
-    env = os.environ.get("LVR_DATA_DIR")
-    if env:
-        d = Path(env)
-    elif os.name == "nt":
+    if os.environ.get("LVR_DATA_DIR"):
+        d = Path(os.environ["LVR_DATA_DIR"])
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA") or str(Path.home())
-        d = Path(base) / APP_NAME
+        d, old = Path(base) / APP_NAME, Path(base) / _PRE_RENAME_APP
     else:
-        d = Path.home() / f".{APP_NAME}"
+        d, old = Path.home() / f".{APP_NAME}", Path.home() / f".{_PRE_RENAME_APP}"
+    if not d.exists() and old.is_dir():
+        try:
+            old.rename(d)
+        except OSError:
+            pass  # locked / cross-device — fall through and start fresh
     d.mkdir(parents=True, exist_ok=True)
     return d
 

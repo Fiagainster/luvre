@@ -6,7 +6,7 @@ scenarios mirror the obfuscation family found in Root-Me's KeygenMe
 (overlapped instructions, disguised calls, RDTSC gauntlets).
 """
 
-from lovelyreverse.disasm import decode_trace
+from luvre.disasm import decode_trace
 
 
 def texts(r):

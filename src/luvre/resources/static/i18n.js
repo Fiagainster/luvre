@@ -1,12 +1,12 @@
 "use strict";
-/* i18n for lovelyreverse — zh (default) + en.
+/* i18n for luvre — zh (default) + en.
  * Static markup: data-i18n / data-i18n-ph (placeholder) / data-i18n-title / data-i18n-html
  * Dynamic strings: t("key", {param: value})
  * Backend/API error strings stay English on purpose. */
 
 const LV_I18N = {
   zh: {
-    "doc.title": "lovelyreverse — 手搓向的逆向工程工作站",
+    "doc.title": "luvre — 手搓向的逆向工程工作站",
     "brand.tag": "手搓向的逆向工程工作站",
 
     "open.btn": "⌖ 打开二进制",
@@ -306,7 +306,7 @@ const LV_I18N = {
   },
 
   en: {
-    "doc.title": "lovelyreverse — hands-on RE workstation",
+    "doc.title": "luvre — hands-on RE workstation",
     "brand.tag": "hands-on RE workstation",
 
     "open.btn": "⌖ Open binary",
