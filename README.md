@@ -140,7 +140,14 @@
 
 ### 安装
 
-**方式一：从 GitHub Release 安装（推荐）**
+**方式一：从 PyPI 安装（推荐）**
+
+```bash
+pip install luvre
+lvr serve
+```
+
+**方式二：从 GitHub Release 安装**
 
 到 [Releases](https://github.com/Fiagainster/luvre/releases) 下载最新的 `.whl`，然后：
 
@@ -158,7 +165,7 @@ pip install -e .
 ```
 
 > 依赖极简：只有 `pyghidra`（Ghidra 桥）和 `capstone`（裸反汇编的指令解码）两个第三方依赖——HTTP 服务是 stdlib 手写的，前端是原生 JS，离线可用。
-> PyPI 发布准备中（`pip install luvre`）。
+> PyPI 已上线：[pypi.org/project/luvre](https://pypi.org/project/luvre)。
 
 ### 启动
 
@@ -244,10 +251,12 @@ CI（GitHub Actions，ubuntu + windows × Python 3.11/3.13）跑 `-m "not engine
 ## 发行
 
 ```bash
-pip install build
-python -m build          # → dist/*.whl + dist/*.tar.gz
-gh release create v0.4.3 dist/luvre-0.4.3* --title "v0.4.3" --notes "..."
+gh release create v0.4.4 --title "v0.4.4" --notes "..."
 ```
+
+就这一步：Release 发布事件触发 [.github/workflows/publish.yml](.github/workflows/publish.yml)，
+GitHub Actions 自动构建 sdist + wheel、把产物挂回 Release 并上传 PyPI——
+走 Trusted Publishing（OIDC），仓库里不需要任何 API token。
 
 ## 路线图
 

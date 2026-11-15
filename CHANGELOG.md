@@ -2,6 +2,12 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
+## [未发布]
+
+### 新增
+
+- **PyPI 正式发布**：`pip install luvre` 可装（[pypi.org/project/luvre](https://pypi.org/project/luvre)）。发布链路走 GitHub Actions Trusted Publishing（OIDC 免 token）——`.github/workflows/publish.yml` 监听 release published 事件：自动构建 sdist + wheel → 产物挂回 Release → 上传 PyPI；手动 dispatch 带 dry_run 开关可只验证构建
+
 ## [0.4.3] — 2026-11-15
 
 改名发布：lovelyreverse → luvre（取证圈已有成名的 Lovely* 工具系列，同社区同前缀易被误认为同族产品）。luvre 读作卢浮宫（把二进制当藏品上台解剖）。
