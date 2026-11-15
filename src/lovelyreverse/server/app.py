@@ -137,59 +137,90 @@ class AppState:
         wsl.exe probes take 5-20s, far too slow for a request thread — the
         first call kicks off a daemon probe and returns {"probing": True}
         until it lands.  Call with background=False to probe inline (tests).
+        Polling while a probe is in flight returns the same stub instead of
+        stacking a second synchronous probe behind the first one.
         """
         if not self._gdb_env_cache:
-            if background and not self._gdb_probing:
+            if self._gdb_probing:
+                return {"probing": True, "platform": os.name}
+            if background:
                 self._gdb_probing = True
-                threading.Thread(target=self.gdb_env, kwargs={"background": False},
+                threading.Thread(target=self._gdb_env_probe_bg,
                                  daemon=True).start()
-                return {"probing": True}
+                # platform is free — the UI needs it before the probes land
+                return {"probing": True, "platform": os.name}
             self._gdb_probing = True
-            from lovelyreverse.gdb.session import find_local_gdb
-
-            local = find_local_gdb()
-            wsl_ok = False
-            distros: list[str] = []
             try:
-                env = dict(os.environ, WSL_UTF8="1")
-                out = subprocess.run(
-                    ["wsl", "-l", "-q"], capture_output=True,
-                    # wsl.exe writes UTF-8 even on zh-CN consoles (proxy warnings
-                    # etc.); the default GBK locale decode raised inside Popen's
-                    # own reader thread — untouchable from here.
-                    encoding="utf-8", errors="replace",
-                    timeout=20, env=env,
+                return self._gdb_env_probe()
+            finally:
+                self._gdb_probing = False
+        return self._gdb_env_cache
+
+    def _gdb_env_probe_bg(self) -> None:
+        """Daemon-thread wrapper: probe once, then release the in-flight flag.
+
+        (The old recursive self-call re-entered gdb_env, saw the in-flight
+        flag it had just set, and returned the stub without probing at all.)
+        """
+        try:
+            self._gdb_env_probe()
+        finally:
+            self._gdb_probing = False
+
+    def _gdb_env_probe(self) -> dict[str, Any]:
+        """The slow part of gdb_env — runs once, result lands in the cache."""
+        from lovelyreverse.gdb.session import find_local_gdb
+
+        local = find_local_gdb()
+        wsl_ok = False
+        distros: list[str] = []
+        try:
+            env = dict(os.environ, WSL_UTF8="1")
+            out = subprocess.run(
+                ["wsl", "-l", "-q"], capture_output=True,
+                # wsl.exe writes UTF-8 even on zh-CN consoles (proxy warnings
+                # etc.); the default GBK locale decode raised inside Popen's
+                # own reader thread — untouchable from here.
+                encoding="utf-8", errors="replace",
+                timeout=20, env=env,
+            )
+            names = [ln.strip() for ln in out.stdout.replace("\x00", "").splitlines()
+                     if ln.strip() and not ln.strip().startswith("wsl:")]
+            distros = names
+        except Exception:  # noqa: BLE001 — WSL missing entirely
+            distros = []
+        if distros:
+            probe = distros[0]
+            if any(d.startswith("Ubuntu") for d in distros):
+                probe = next(d for d in distros if d.startswith("Ubuntu"))
+            try:
+                r = subprocess.run(
+                    ["wsl", "-d", probe, "--", "gdb", "--version"],
+                    capture_output=True, encoding="utf-8", errors="replace",
+                    timeout=30, env=env,
                 )
-                names = [ln.strip() for ln in out.stdout.replace("\x00", "").splitlines()
-                         if ln.strip() and not ln.strip().startswith("wsl:")]
-                distros = names
-            except Exception:  # noqa: BLE001 — WSL missing entirely
-                distros = []
-            if distros:
-                probe = distros[0]
-                if any(d.startswith("Ubuntu") for d in distros):
-                    probe = next(d for d in distros if d.startswith("Ubuntu"))
-                try:
-                    r = subprocess.run(
-                        ["wsl", "-d", probe, "--", "gdb", "--version"],
-                        capture_output=True, encoding="utf-8", errors="replace",
-                        timeout=30, env=env,
-                    )
-                    wsl_ok = r.returncode == 0
-                except Exception:  # noqa: BLE001
-                    wsl_ok = False
-            self._gdb_env_cache = {
-                "probing": False,
-                "local_gdb": local,
-                "local_ok": bool(local),
-                "wsl_ok": wsl_ok,
-                "distros": distros,
-            }
+                wsl_ok = r.returncode == 0
+            except Exception:  # noqa: BLE001
+                wsl_ok = False
+        self._gdb_env_cache = {
+            "probing": False,
+            "platform": os.name,
+            "local_gdb": local,
+            "local_ok": bool(local),
+            "wsl_ok": wsl_ok,
+            "distros": distros,
+        }
         return self._gdb_env_cache
 
     def gdb_start(self, transport: str, distro: str, args: str, stdin_text: str,
                   env_text: str = "") -> dict[str, Any]:
         from lovelyreverse.gdb.session import GdbSession, GdbError
+
+        if transport == "wsl" and os.name != "nt":
+            # the UI hides the option on POSIX hosts, but a stale page or a
+            # direct API call could still ask for it — fail with the reason
+            raise GdbError("wsl transport requires a Windows host — "
+                           "use the local gdb transport here")
 
         if self.gdb_session is not None:
             old_prog = None

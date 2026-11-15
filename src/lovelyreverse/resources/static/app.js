@@ -1377,6 +1377,41 @@ async function gdbHintIfStaleTarget(newPath) {
   } catch { /* gdb info unavailable — not fatal */ }
 }
 
+let GDB_ENV_DONE = false;
+
+async function gdbAdaptTransports() {
+  /* Host-adaptive transport menu.  /api/gdb/env reports the host platform
+     and whether WSL / a native gdb actually exists.  On a POSIX host the
+     WSL option is dead weight (the backend refuses it, and the distro box
+     is meaningless), and "Windows 本机 gdb" is just plain gdb on PATH —
+     so drop the WSL option, hide the distro input, relabel the local one
+     and default to it.  Also covers Windows machines without WSL.  Runs
+     once per page load; while the backend probe is in flight, poll. */
+  if (GDB_ENV_DONE) return;
+  let env = null;
+  try {
+    for (let i = 0; i < 8; i++) {
+      env = await (await fetch("/api/gdb/env")).json();
+      if (!env.probing) break;
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+  } catch { return; }  // env unavailable — leave the default menu untouched
+  if (!env || env.probing) return;
+  GDB_ENV_DONE = true;
+  const posix = env.platform && env.platform !== "nt";
+  const wslOpt = document.querySelector('#gdb-transport option[value="wsl"]');
+  const localOpt = document.querySelector('#gdb-transport option[value="local"]');
+  if (posix || env.wsl_ok === false) {
+    wslOpt.remove();
+    $("#gdb-distro").classList.add("hidden");
+    if ($("#gdb-transport").value === "wsl") $("#gdb-transport").value = "local";
+    if (posix) {
+      localOpt.removeAttribute("data-i18n");   // not "Windows 本机 gdb" here
+      localOpt.textContent = t("gdb.transport.local.posix");
+    }
+  }
+}
+
 async function gdbStart() {
   const transport = $("#gdb-transport").value;
   const distro = $("#gdb-distro").value.trim() || "Ubuntu-22.04";
@@ -1441,6 +1476,7 @@ function gdbExit() {
 }
 
 function wireGdb() {
+  gdbAdaptTransports();
   $("#gdb-start").onclick = gdbStart;
   $("#gdb-exit-btn").onclick = gdbExit;
   $("#gdb-run").onclick = () => gdbExec("run");

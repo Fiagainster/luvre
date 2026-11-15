@@ -2,6 +2,17 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
+## [未发布]
+
+### 修复
+
+- **CI Ubuntu 全挂（v0.4.0 起三个版本）**：`mbcs` 是 Windows 专属 codec 名，io_encoding 原逻辑「wsl=utf-8 / 其余=mbcs」在 POSIX 上选到它必炸——ubuntu runner 自带真 gdb，本机传输真实可达，写 MI 行时 `LookupError: unknown encoding: mbcs`。改为一行条件：POSIX 一律 utf-8（dev-notes #31）
+
+### 变更
+
+- **gdb 传输选项按宿主自适应**：`/api/gdb/env` 补 `platform` 字段；POSIX 宿主的前端删掉 WSL 选项与发行版输入框，「Windows 本机 gdb」改标「本机 gdb（PATH）」并默认 local；Windows 无 WSL（`wsl_ok=false`）同样收敛。`gdb_start` 加 POSIX 硬闸兜底（stale 页面/裸 API 传 `wsl` 直接报错），探测中轮询不再叠加同步重探
+- **README/发行形态说明**：前置要求新增 gdb 可选项 bullet（仅动态调试需要），便携版说明注明其只覆盖静态链、动态调试始终需宿主自备 gdb
+
 ## [0.4.2] — 2026-11-15
 
 真题两轮（Root-Me ch13/ch18/ch20 纯 UI 做题暴露的短板；复现手记 `docs/writeup-ch13.md`、`docs/writeup-ch20.md`，dev-notes 踩坑 #27–#30）。

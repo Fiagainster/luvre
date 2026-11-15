@@ -339,3 +339,24 @@ S 取低 8 位再加字节。凡 rol/ror 之后，cl/ch/dl 都混进了别处的
 | m | 切样本后 gdb 会话仍指旧程序，「启动」点击被 already active 吞掉 | 会话存活跨页面刷新 | 后端按 normcase 比对程序路径自动重启；前端 unhide 启动钮 + stale toast |
 | n | 裸 `python -m lovelyreverse` AttributeError | 顶层 Namespace 没有 serve 子命令默认值 | _normalize_argv 补 serve 前缀（白名单 -h/--help/--version 放行） |
 | o | wsl 探测炸 Popen reader 线程（#29） | text=True 按 GBK 严格解码 UTF-8 stderr | 显式 encoding/errors，三处 spawn 全量排查 |
+
+## CI 平台兼容补丁（2026-11-15，v0.4.2 后）
+
+**踩坑 #31 — mbcs 是 Windows 专属编码名，本机传输在 POSIX 上选它必炸**：io_encoding 原逻辑
+「wsl=utf-8 / 其余=mbcs」，但 `mbcs` 这个 codec 名只存在于 Windows——CI 的 ubuntu runner
+自带真 gdb，`find_local_gdb()` 命中 → 本机传输路径在 Linux 上真实可达 → 写 MI 行时
+`LookupError: unknown encoding: mbcs`（TestSessionFlow 全线 setup 失败，CI 挂了至少三个版本
+没人点开日志看）。修法一行：`"utf-8" if (transport == "wsl" or os.name != "nt") else "mbcs"`。
+
+两条延伸教训：1) 「Linux 理论可用」的口径是虚的——解释器代码里埋着平台编码假设，CI 一跑
+才见真章；2) CI 挂了先看 log 再决定要不要收窄平台口径（本次差一点就把「双平台」错杀成
+「Windows only」，实际是一行修复）。
+
+**同批：gdb 传输按宿主自适应**（不修的话 Linux 宿主的 UI 还在傻找 WSL）：`/api/gdb/env`
+补 `platform` 字段；前端 `gdbAdaptTransports()` 拿到 env 后，POSIX 宿主删掉 WSL 选项、
+藏发行版输入框、把「Windows 本机 gdb」改成「本机 gdb（PATH）」并默认 local；Windows 无
+WSL（`wsl_ok=false`）同样收敛。顺手修了一个被前端轮询放大的后端隐患：探针在后台跑时
+再来的 `/api/gdb/env` 请求原本会**同步重跑一遍完整探针**（wsl 探针 5-20s，每个轮询请求
+都阻塞这么久）——拆出 `_gdb_env_probe()`，探测中一律返回 probing stub 不再叠加；
+`gdb_start` 加 POSIX 硬闸，stale 页面/裸 API 传 `transport=wsl` 直接报「wsl transport
+requires a Windows host」。

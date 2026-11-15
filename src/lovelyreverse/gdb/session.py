@@ -109,8 +109,11 @@ class GdbSession:
         self.argv_override = argv_override  # test seam: full command line instead of gdb
         # Windows gdb speaks the ANSI codepage (GBK here) on its stdio —
         # UTF-8 bytes for 网安训练 arrive as mojibake and its own echoes
-        # come back the same way.  Linux gdb is plain UTF-8.
-        self.io_encoding = "utf-8" if transport == "wsl" else "mbcs"
+        # come back the same way.  Linux gdb is plain UTF-8.  mbcs is a
+        # Windows-only codec name — POSIX must never select it (CI caught
+        # this: ubuntu runners ship a real gdb, so the local transport is
+        # reachable there and .encode("mbcs") blew up in the reader path).
+        self.io_encoding = "utf-8" if (transport == "wsl" or os.name != "nt") else "mbcs"
         self.on_console = on_console
 
         self.proc: subprocess.Popen | None = None

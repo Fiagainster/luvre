@@ -1,6 +1,7 @@
 """HTTP layer tests with a stub engine — no JVM involved."""
 
 import base64
+import os
 from pathlib import Path
 import json
 import threading
@@ -325,6 +326,59 @@ class TestGdbRoutes:
         with pytest.raises(urllib.error.HTTPError) as e:
             post(server, "/api/gdb/exec", {"action": "run"})
         assert e.value.code == 409
+
+
+class TestGdbEnvAdaptive:
+    """Host-adaptive transport surface (POSIX must never touch WSL)."""
+
+    def test_wsl_start_refused_on_posix(self, monkeypatch):
+        from lovelyreverse.gdb.session import GdbError
+        st = AppState(StubEngine())
+        monkeypatch.setattr(os, "name", "posix")
+        with pytest.raises(GdbError, match="wsl transport requires"):
+            st.gdb_start("wsl", "Ubuntu-22.04", "", "")
+
+    def test_wsl_start_allowed_on_windows(self, monkeypatch):
+        # the guard passes on nt — the call then fails on "no program loaded",
+        # which proves it got past the transport check
+        from lovelyreverse.gdb.session import GdbError
+        st = AppState(StubEngine())
+        monkeypatch.setattr(os, "name", "nt")
+        with pytest.raises(GdbError, match="no program loaded"):
+            st.gdb_start("wsl", "Ubuntu-22.04", "", "")
+
+    def test_probing_stub_never_stacks_probes(self, monkeypatch):
+        # while the background probe is in flight, polling must return the
+        # stub without launching a second synchronous probe (the wsl probe
+        # takes 5-20s; a stacked one blocked request threads for the same
+        # duration on every poll)
+        st = AppState(StubEngine())
+        calls = []
+        gate = threading.Event()
+
+        def slow_probe(self):
+            calls.append(1)
+            gate.wait(5)
+            st._gdb_env_cache = {"probing": False, "platform": os.name,
+                                 "local_ok": True, "wsl_ok": False, "distros": []}
+            return st._gdb_env_cache
+
+        monkeypatch.setattr(AppState, "_gdb_env_probe", slow_probe)
+        first = st.gdb_env(background=True)
+        assert first == {"probing": True, "platform": os.name}
+        deadline = time.time() + 5
+        while time.time() < deadline and not calls:
+            time.sleep(0.05)
+        assert calls == [1]           # background probe entered _gdb_env_probe
+        second = st.gdb_env(background=True)
+        assert second == {"probing": True, "platform": os.name}
+        assert calls == [1]           # the poll did NOT stack a sync re-probe
+        gate.set()
+        deadline = time.time() + 5
+        while time.time() < deadline and not st._gdb_env_cache:
+            time.sleep(0.05)
+        assert st._gdb_env_cache["platform"] == os.name
+        assert len(calls) == 1        # exactly one probe ran, end to end
 
 
 class TestOpenFlow:

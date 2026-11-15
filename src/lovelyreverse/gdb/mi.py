@@ -42,7 +42,8 @@ def _unescape_c(body: str, encoding: str = "utf-8") -> str:
     escapes; turning each escape into its own Unicode char shreds UTF-8
     sequences into mojibake, so escapes are collected at byte level and the
     whole payload is decoded once at the end (`encoding` = the transport's
-    io_encoding: utf-8 for wsl gdb, mbcs for mingw gdb).
+    io_encoding: utf-8 for wsl gdb and POSIX gdb, mbcs for mingw gdb on
+    Windows).
 
     Octal form matters: Linux gdb escapes high bytes as \\NNN (e.g.
     "\\344\\270\\264" for 临), and \\0 is a prefix of \\012 — handled by
@@ -216,7 +217,7 @@ def parse_mi_line(line: str, encoding: str = "utf-8") -> dict[str, Any] | None:
     """Classify and parse one MI output line.
 
     `encoding` is the byte encoding behind the escape sequences gdb emitted
-    (utf-8 for the wsl transport, mbcs for Windows gdb).  Returns
+    (utf-8 for the wsl transport and POSIX gdb, mbcs for Windows gdb).  Returns
     {kind, class, token, payload} or None for blank/prompt lines.
     kind ∈ {result, exec, notify, console, log, target, prompt, noise}
     """
