@@ -124,6 +124,13 @@
 - **Ghidra 11.3+ 或 12.x**（[下载](https://github.com/NationalSecurityAgency/ghidra/releases)）
 - Windows 优先（Linux/macOS 理论可用，未系统测试）
 
+> **关于发行形态的说明**：Release 里是 `.whl` / `.tar.gz`，**没有单文件 exe**——这是刻意的，
+> 不是没做。本工具是「分析引擎的做题前端」：真正干活的引擎是 Ghidra（~400MB 的 Java 应用，
+> 还要 JDK 21+），Python 这部分只是驱动它的服务与界面，物理上无法把引擎塞进一个 exe。
+> 所以标准形态是 pip 安装 + 环境里有一份 Ghidra（位置自动发现，见下方启动一节）。
+> 「便携文件夹版」（PyInstaller 打包 + 自带精简 JRE + Ghidra 目录，解压即用，约 500–600MB）
+> 列在路线图上，有足够需求再做——如果你想要它，开个 issue 说一声就行。
+
 ### 安装
 
 **方式一：从 GitHub Release 安装（推荐）**
@@ -248,6 +255,7 @@ gh release create v0.4.2 dist/* --title "v0.4.2" --notes "..."
 - [ ] 签名库社区化：YARA 规则导入、用户自定义签名
 - [ ] Ghidra 数据库复用（免重分析）
 - [x] 国际化（中文 / English 界面切换）
+- [ ] 便携版发行（PyInstaller onedir + 精简 JRE + Ghidra 目录，解压即用；有需求再做）
 
 ## 致谢
 
