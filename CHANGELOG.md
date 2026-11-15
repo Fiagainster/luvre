@@ -11,6 +11,7 @@
 ### 修复
 
 - **CI Ubuntu 全挂（v0.4.0 起三个版本）**：`mbcs` 是 Windows 专属 codec 名，io_encoding 原逻辑「wsl=utf-8 / 其余=mbcs」在 POSIX 上选到它必炸——ubuntu runner 自带真 gdb，本机传输真实可达，写 MI 行时 `LookupError: unknown encoding: mbcs`。改为一行条件：POSIX 一律 utf-8（dev-notes #31）
+- **gdb tab 漏 `data-i18n`**：EN 界面中心 tab 栏残留中文「动态调试」——补属性，并统一 ⛭ 齿轮符号
 
 ### 变更
 

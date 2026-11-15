@@ -79,6 +79,8 @@
 
 （原「截图角标待重拍」已解决：2026-11-11 用 browser-use 后台直存重拍五张 v0.3.0 截图，顺带修掉两个 drawer 布局 bug，见踩坑 #12。）
 
+（改名 luvre 后五张截图于 2026-11-15 用 puppeteer-core + 本机 Chrome headless 1920×1080 重拍直存 `docs/screenshots/`：browser-use 视口 952×570@1.25 触发抽屉断点、resizeTo/popup 均不可用，故换 headless。主题/语言矩阵沿用旧图：hero/workstation/callgraph = EN+dark，decoder/unpack = ZH+light，用 `evaluateOnNewDocument` 预写 `lv.lang`/`lv.theme`。要点：① hero 空态需服务端无程序（boot 恢复走 `resetWorkspace()` → `#hero.hidden`）且先收起解码抽屉（`body:has(#drawer.open)` 会藏 hero）；② 解码链 = pyre 入口 pyc 密文单步 XOR 0x5a → `flag{ch4in_1s_fun}`，XOR 行默认 key "ATRI"，输入用聚焦 + Ctrl+A 全选替换（三击选不中），key 字段回读校验防拼接；③ 解包场景选 `_bz2.pyd`——执行映像（MZ 头）才显示「交给 Ghidra」按钮，manifest 属文本预览按设计不出按钮；④ headless Chrome 页面静止时 rAF 轮询被节流，`waitForFunction` 必须 `polling: 250`；⑤ 顺带修掉 gdb tab 漏 `data-i18n` 的 i18n 缺口（EN 界面残留「动态调试」）。）
+
 ## 踩坑记录（v0.2.0 新增）
 
 1. **GhidraProject 锁泄漏（严重，已修）**：`_open_job` 里 GhidraProject 创建之后、`self.project = project` 赋值之前任何异常（如 0 字节文件 import 失败）都会泄漏局部 project 句柄——它持有磁盘项目锁，之后**每一次** open 都报 `LockException: Unable to lock project! ...main\main`，引擎永久中毒，只能删项目目录。修法：整段包 `try/except BaseException`，传播前 `project.close()`。教训：**Ghidra 项目句柄是锁，不是普通资源；失败路径必须显式释放，早于任何状态赋值**。
@@ -188,7 +190,7 @@
 **发版终检（2026-11-11，v0.3.0 定稿）**：
 
 1. API 冒烟对照作者笔记工作流：锚点字符串 → xref（DATA+PARAM 双引用，带函数入口）→ decompile 行映射（gap 落「下一行」规则正中 `printf("Please input flag: ");`）；fgets thunk → 调用者 main；常量/熵字段齐全 ✅
-2. 五张 README 截图用 v0.3.0 界面重拍（browser-use 后台直存 docs/screenshots/）：hero 空态 / workstation（做题链高亮 + 查壳结论 + `_lvr` 工程目录行）/ 调用图（深度 1 层次布局）/ 解码链（XOR 0x17 → XOR "ATRI" → flag）/ PyInstaller 解包（60 条目 + manifest 预览）✅
+2. 五张 README 截图用 v0.3.0 界面重拍（browser-use 后台直存 docs/screenshots/）：hero 空态 / workstation（做题链高亮 + 查壳结论 + `_lvr` 工程目录行）/ 调用图（深度 1 层次布局）/ 解码链（pyre 入口 pyc 密文单步 XOR 0x5a → `flag{ch4in_1s_fun}`；旧记载误作 ez_debug 的 0x17+ATRI 双链，以历史截图为准更正）/ PyInstaller 解包（60 条目 + 交给 Ghidra 按钮）✅
 3. 过程中抓到并修掉两个 drawer 布局 bug（踩坑 #12：收起后死白 + hero 永不回）✅
 4. 全量 pytest 125 passed；`node --check` 过 ✅
 
