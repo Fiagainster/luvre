@@ -7,6 +7,7 @@
 ### 新增
 
 - **PyPI 正式发布**：`pip install luvre` 可装（[pypi.org/project/luvre](https://pypi.org/project/luvre)）。发布链路走 GitHub Actions Trusted Publishing（OIDC 免 token）——`.github/workflows/publish.yml` 监听 release published 事件：自动构建 sdist + wheel → 产物挂回 Release → 上传 PyPI；手动 dispatch 带 dry_run 开关可只验证构建
+- **README 个性化改写**：新增「为什么 2026 年还手搓？」立场段（AI 军备竞赛的现实、No AI inside 的本地哲学、"AI 结对开发拒绝代劳工具"的自嘲）；名字故事补全克苏鲁旧梗；引言加一句结对开发 hook
 
 ## [0.4.3] — 2026-11-15
 

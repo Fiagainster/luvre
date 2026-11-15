@@ -2,8 +2,9 @@
 
 > **手搓向的逆向工程工作站** — PyGhidra 驱动 Ghidra 引擎，界面专为手工分析 / CTF 解题设计。
 > **No AI inside.** 这个工具不替你思考——它让你思考得更快。
+> 它自己就是 AI 结对着搓出来的——但它拒绝替你思考。
 >
-> A hands-on reverse-engineering workstation powered by the Ghidra engine, built for manual analysis and CTF work. No AI — the tool doesn't think for you, it makes you think faster.
+> A hands-on reverse-engineering workstation powered by the Ghidra engine, built for manual analysis and CTF work. No AI — the tool doesn't think for you, it makes you think faster. Pair-programmed with AI agents, yet refusing to think for you.
 
 <p align="center">
   <img src="docs/screenshots/workstation.png" width="96%" alt="luvre workstation — decompile view">
@@ -23,15 +24,29 @@
 函数列表 → 伪代码 → 汇编 → 内存十六进制 → 交叉引用 → 调用图 → 解码实验室 → ⚙ 动态调试 → 解题。
 反编译被混淆打断时，⚡ 裸反汇编按真实执行流把原始字节直接解成人话。
 
+这条链是固定的——刷了几十道题，还没有哪道能跳出去。luvre 的全部野心，就是让它在一个页面里跑完，不在工具之间辗转。
+
 名字 **luvre** = luv（爱心的 ♥）+ re（reverse engineering），读作「卢浮宫」——把二进制当藏品，摆在解剖台上细细观摩：逆向是手艺活，工具应该像一把顺手的刻刀，而不是一个代劳的黑盒。
 
-> v0.4.2 前曾名 **lovelyreverse**。取证圈已有成名的 Lovely* 工具系列（LovelyMem 等），
-> 同社区同前缀容易让人误会是一家的，故更名；CLI `lvr`、端口 7331 均不变，
-> 数据目录首次运行自动从旧名迁移，≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。
+> v0.4.2 前曾名 **lovelyreverse**——"可爱的逆向"。其实一点都不可爱：样本逆出来是什么，克苏鲁般不可名状。
+> 恰好取证圈已有成名的 Lovely* 工具系列（LovelyMem 等），同社区同前缀容易让人误会是一家的，故更名；
+> CLI `lvr`、端口 7331 均不变，数据目录首次运行自动从旧名迁移，≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。
 
 <p align="center">
   <img src="docs/screenshots/hero.png" width="60%" alt="luvre empty state">
 </p>
+
+## 为什么 2026 年还手搓？
+
+这大概是本项目最常被问的问题：AI 都能一把梭了，手工逆向还有什么意义？
+
+先把现实摆出来：如今的赛圈像一场左脚踩右脚的军备竞赛——主办方拼命上混淆防 AI，选手探索最大化利用 AI 的姿势，题目已经难到几乎只能靠 AI 才做得出来，人眼越来越看不懂。CTF 已死吗？在拿奖层面上也许是的，但不影响学东西。区别只在于：是让 AI 完全代替你思考，还是把它当作学习辅助的工具。
+
+luvre 是后者的极端形态：**No AI inside**——没有内置大模型，不联网，全部计算发生在你的机器上。常量识别查的是签名表而不是神经网络，裸反汇编是 capstone 按 CPU 的视角解码，动态调试接的是货真价实的 gdb。它押注一件朴素的事：**只要程序完全在本地运行，CPU 能读懂的字节，人理论上也能读懂，就能完全破译**。怪物并没有那么强大——除非它是高维空间的投影，意思是核心逻辑全在服务器上、本地只剩一个运行的空壳；所以 luvre 连一根网线都不需要，它想成为投影都成不了。
+
+至于这工具本身——是 AI 结对着搓出来的：思路在人脑里，实现交给智能体，连这个仓库都是它自己建的。用 AI 造一把拒绝 AI 代劳的刻刀，这个拧巴的反差就是 luvre 的全部立场：**AI 负责让工具更好用，思考这件事，还是得亲自来**。
+
+慢慢练习，慢慢完善。给自己用的工具，开源只是顺手的事情——如果你也在这条做题链上，希望它让你思考得更快。
 
 ## 功能
 
