@@ -116,7 +116,7 @@ class TestDataDir:
         else:
             monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         d = cfg.data_dir()
-        assert d.name == "luvre"
+        assert d.name == ("luvre" if cfg.os.name == "nt" else ".luvre")
         assert (d / "marker.txt").read_text(encoding="utf-8") == "keep"
         assert not old.exists()
 
