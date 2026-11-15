@@ -167,11 +167,11 @@ lvr serve
 到 [Releases](https://github.com/Fiagainster/luvre/releases) 下载最新的 `.whl`，然后：
 
 ```bash
-pip install luvre-0.4.3-py3-none-any.whl  # ≤0.4.2 的发行包沿用旧名 lovelyreverse-*
+pip install luvre-0.4.4-py3-none-any.whl  # ≤0.4.2 的发行包沿用旧名 lovelyreverse-*
 lvr serve
 ```
 
-**方式二：从源码安装**
+**方式三：从源码安装**
 
 ```bash
 git clone https://github.com/Fiagainster/luvre.git
