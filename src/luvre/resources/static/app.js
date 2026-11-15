@@ -1710,6 +1710,7 @@ async function xorBrute() {
         S.ops = [{ op: "xor", args: { key: Number(row.dataset.key).toString(16), hex: true } }];
         renderOps(); runChain();
       });
+    box.scrollIntoView({ block: "nearest" }); // 矮抽屉里结果区在折叠线下方，自动带过来
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -1738,6 +1739,7 @@ async function xorDerive() {
         S.ops = [{ op: "xor", args: r.key_ascii ? { key: r.key_ascii } : { key: r.key_bytes, hex: true } }];
         renderOps(); runChain();
       });
+    box.scrollIntoView({ block: "nearest" });
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -2914,3 +2916,18 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   logLine(t("log.welcome"), "ok");
 });
+
+// boot 自检：boot 是一条长异步流，中途抛异常时后续接线全部静默跳过，
+// 表现为"按钮点了没反应"。这个检查独立于 boot 存活（顶层 setTimeout），
+// 接线死了也能弹出来。
+setTimeout(() => {
+  const must = ["#btn-show-graph", "#hex-send", "#raw-go", "#btn-xor-brute", "#btn-search", "#drawer-toggle"];
+  const dead = must.filter((sel) => {
+    const el = $(sel);
+    return el && typeof el.onclick !== "function";
+  });
+  if (dead.length) {
+    console.error("boot wiring incomplete:", dead);
+    toast(t("boot.incomplete", { items: dead.join(" ") }), "error", 12000);
+  }
+}, 2500);

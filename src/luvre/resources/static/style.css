@@ -683,6 +683,9 @@ body:has(#drawer.closed) { --drawer-h: 32px; }
   border-top: 1px solid var(--line);
   display: none;
   padding: 4px 10px;
+  /* flex 列里唯一的滚动容器会被 flex-shrink 压成几像素的残条（内容全被裁掉、
+     页签又因"刚好塞下"不出滚动条）——禁止收缩，空间不够让页签滚 */
+  flex-shrink: 0;
 }
 .xor-results.show { display: block; }
 .xor-head {

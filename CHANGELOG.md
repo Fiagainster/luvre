@@ -9,10 +9,11 @@
 - **PyPI 正式发布**：`pip install luvre` 可装（[pypi.org/project/luvre](https://pypi.org/project/luvre)）。发布链路走 GitHub Actions Trusted Publishing（OIDC 免 token）——`.github/workflows/publish.yml` 监听 release published 事件：自动构建 sdist + wheel → 产物挂回 Release → 上传 PyPI；手动 dispatch 带 dry_run 开关可只验证构建
 - **README 个性化改写**：新增「为什么 2026 年还手搓？」立场段（AI 军备竞赛的现实、No AI inside 的本地哲学、"AI 结对开发拒绝代劳工具"的自嘲）；名字故事补全克苏鲁旧梗；引言加一句结对开发 hook
 - **ch20 解题脚本 `docs/scripts/solve_ch20.py`**：种子哈希 + 异或消去推密码的本地 Python 版（纯标准库），自带校验循环回验；输入格式容错（纯 hex / 空格分隔 / ⧉ hexdump 带地址列均认），超长输入自动钳制并警告（0x08048000 起会混入 ELF 头的 footgun），假种子 0x3C283DD3 出现时直接提示回查 §4。附 `ch20_code_hex.txt`（.text 163 B）供不开样本验证脚本
+- **boot 自检**：启动接线是一条长异步流，中途抛异常时后续按钮静默失联（表象就是"点了没反应"）——独立于 boot 的顶层延时检查六个关键按钮，接线不全时弹红色 toast 指名失联清单并提示刷新，不再无声死掉
 
 ### 修复
 
-- **解码实验室 XOR 结果区叠画（真·重叠，不是观感问题）**：结果区出现后 flex 把 `.decoder-grid` 压瘪，第一列按钮排溢出 grid 盒子往下画、直接叠在结果行与状态栏上——解码页签改为可整体滚动（`overflow-y: auto`），grid 不再允许收缩（`flex: 1 0 auto`），输入框保底 96px；结果区加标题栏（「XOR 爆破结果 · 计数」+ **✕ 关闭**按钮，此前没有任何关闭手段）
+- **解码实验室 XOR 结果区三层连环坑（真·看不见，不是观感问题）**：①结果区出现后 flex 把 `.decoder-grid` 压瘪，第一列按钮排溢出 grid 盒子往下画、叠在结果行与状态栏上——解码页签改为可整体滚动、grid 禁止收缩（`flex: 1 0 auto`）、输入框保底 96px；②但 grid 禁缩后结果区成了列里**唯一的可收缩滚动容器**，flex 把它压成 9px 残条——内容全被裁掉、页签又因"刚好塞下"不出滚动条，表象变成"结果生成但完全看不见、滚动条拖不动"——结果区 `flex-shrink: 0` 根修，空间不够时页签真正滚动；③结果区弹出时 `scrollIntoView(nearest)` 自动滚到可见位置。另加标题栏（「XOR 爆破结果 · 计数」+ **✕ 关闭**按钮，此前没有任何关闭手段）
 - **裸反汇编地址列溢出**：`.ln` 固定 44px 装不下 10 字符地址（`0x08048080`），右溢 20px 压住字节列成"缝合怪"——raw 视图地址列加宽到 76px
 - **HEX 工具栏纯符号按钮可发现性为零**：⚗/⚡/⧉ 只有 hover title，用户找不到"发送按钮"——补可见文案（zh：⚗ 解码 / ⚡ 反汇编 / ⧉ 复制；en：decode / disasm / copy）；块选择器上限 22ch→17ch、右侧信息条可收缩，加宽后工具栏不再溢出
 - **XOR 分数列左对齐参差**（100/99.5/96.7 锯齿）改右对齐；解码输出编码下拉的 title 缩短为一行
