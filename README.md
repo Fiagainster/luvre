@@ -145,7 +145,7 @@
 到 [Releases](https://github.com/Fiagainster/luvre/releases) 下载最新的 `.whl`，然后：
 
 ```bash
-pip install lovelyreverse-0.4.2-py3-none-any.whl  # ≤0.4.2 的发行包沿用旧名
+pip install luvre-0.4.3-py3-none-any.whl  # ≤0.4.2 的发行包沿用旧名 lovelyreverse-*
 lvr serve
 ```
 
@@ -246,7 +246,7 @@ CI（GitHub Actions，ubuntu + windows × Python 3.11/3.13）跑 `-m "not engine
 ```bash
 pip install build
 python -m build          # → dist/*.whl + dist/*.tar.gz
-gh release create v0.4.2 dist/* --title "v0.4.2" --notes "..."
+gh release create v0.4.3 dist/luvre-0.4.3* --title "v0.4.3" --notes "..."
 ```
 
 ## 路线图
