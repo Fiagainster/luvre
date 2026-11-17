@@ -7,19 +7,19 @@
 > A hands-on reverse-engineering workstation powered by the Ghidra engine, built for manual analysis and CTF work. No AI — the tool doesn't think for you, it makes you think faster. Pair-programmed with AI agents, yet refusing to think for you.
 
 <p align="center">
-  <img src="docs/screenshots/workstation.png" width="96%" alt="luvre workstation — decompile view">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/workstation.png" width="96%" alt="luvre workstation — decompile view">
   <br/>
   <em>Workstation — string anchor → xref → the exact decompile line highlighted; packer verdict & entropy bars in the inspector</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/callgraph.png" width="96%" alt="luvre call graph">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/callgraph.png" width="96%" alt="luvre call graph">
   <br/>
   <em>Call graph — Ghidra-style hierarchical layout: callers above, callees below, double-click to expand</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/demo.gif" width="96%" alt="luvre demo — solve a crackme end to end">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/demo.gif" width="96%" alt="luvre demo — solve a crackme end to end">
   <br/>
   <em>60-second solve: decompile → breakpoint → ASLR static↔runtime convert → NOP patch → "Correct!" → flag from the decoder lab</em>
 </p>
@@ -39,7 +39,7 @@
 > CLI `lvr`、端口 7331 均不变，数据目录首次运行自动从旧名迁移，≤0.4.2 的历史发行包仍叫 `lovelyreverse-*`。
 
 <p align="center">
-  <img src="docs/screenshots/hero.png" width="60%" alt="luvre empty state">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/hero.png" width="60%" alt="luvre empty state">
 </p>
 
 ## 为什么 2026 年还手搓？
@@ -86,7 +86,7 @@ luvre 是后者的极端形态：**No AI inside**——没有内置大模型，�
 - **APK 静态分析**：zip 解包落盘 `_lvr/unpacked_apk/` + **dex string pool 提取**（类名/URL/密钥，一键复制/送解码实验室）。
 
 <p align="center">
-  <img src="docs/screenshots/decoder.png" width="96%" alt="luvre decoder lab">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/decoder.png" width="96%" alt="luvre decoder lab">
   <br/>
   <em>Decoder lab — chained ops: hex ciphertext → XOR 0x17 → XOR "ATRI" → flag, in the default light theme</em>
 </p>
@@ -127,7 +127,7 @@ luvre 是后者的极端形态：**No AI inside**——没有内置大模型，�
 - Linux 宿主全链（v0.5.0）：WSL Ubuntu-22.04（真实 Linux + 本机 gdb）跑通引擎与动态链全流程；POSIX 传输自适应、工程目录 ext4（LVR_PROJECT_DIR）；pthread 双线程样本线程面板就绪。补丁副本可独立分发运行——脱离调试器直接打印 Correct
 
 <p align="center">
-  <img src="docs/screenshots/unpack.png" width="72%" alt="PyInstaller unpack modal">
+  <img src="https://raw.githubusercontent.com/Fiagainster/luvre/main/docs/screenshots/unpack.png" width="72%" alt="PyInstaller unpack modal">
 </p>
 
 ## 适用题型
@@ -282,6 +282,8 @@ GitHub Actions 自动构建 sdist + wheel、把产物挂回 Release 并上传 Py
 走 Trusted Publishing（OIDC），仓库里不需要任何 API token。
 
 ## 路线图
+
+> 各项的展开说明（为什么值得/入口提示/启动信号）见 [docs/backlog.md](docs/backlog.md)。
 
 - [ ] Linux/macOS 系统性支持
 - [ ] 结构体/数据类型编辑，Union 面板

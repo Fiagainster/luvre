@@ -2,6 +2,19 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
+## [0.5.1] — 2026-11-18
+
+README 与评估文档随 v0.5.0 的收尾打磨（代码无变更）。
+
+### 变更
+- **README 图片改 GitHub 绝对地址**：PyPI 的 readme_renderer 会剥离相对路径 `<img>`——
+  PyPI 项目页此前一张图都看不到（GitHub 上一直正常）。改绝对 URL 后随本版本生效
+- **evaluation.md 刷新到 v0.5.0 时点**：测试数 253+7、发布成熟度（PyPI/GIF 已落地）、
+  已知债更新（app.js 已拆模块、Linux 宿主已实测）
+- **新增 docs/backlog.md**：搁置中的大件归档（结构体编辑/Pattern Language/pycdc/
+  x64dbg 桥/patch 持久化/环境验证口子），每项带「为什么/入口提示/预估/启动信号」，
+  按做题需求拉动、不预投入；README 路线图指向该文件
+
 ## [0.5.0] — 2026-11-18
 
 gdb 动态链补完最后一公里：内存补丁（NOP/写字节/一键还原/写回样本副本）+ 条件断点（条件/ignore-count）+ ASLR 静态↔运行期换算器 + 线程面板 + 前端按域拆模块 + 本地 API 防护。全程以真实样本 UI 实操验证——ch20.bin（WSL gdb）、challenge1.exe（本机 gdb，DYNAMICBASE/ASLR）、ch18/ch16 静态、WSL Ubuntu-22.04 真实 Linux 宿主全链（dev-notes 踩坑 #32–#37）。
