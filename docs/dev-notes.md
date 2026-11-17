@@ -402,3 +402,30 @@ address 0x75491b75`，报错地址乍看毫无规律（其实是小端读出来�
 地址 0）；畸形/非 UTF-8 请求体返回 400 + 原因（不再 500 + 堆栈）；JobFarm 30min TTL +
 200 上限惰性清扫；Origin/Host 同源校验关 drive-by 与 DNS rebinding（恶意 Origin GET/
 POST 与伪造 Host 实测全 403，非浏览器客户端零影响）。
+
+## WSL 真实 Linux 宿主装机夜话（2026-11-17/18，v0.5.0 发版夜）
+
+**踩坑 #37 — Ghidra 12.2 的类是 Java 25 编译，「21+」的说法对 12.2 不成立**：
+`UnsupportedClassVersionError: ghidra/GhidraClassLoader ... class file version 69.0, this
+Java Runtime only recognizes up to 65.0`——69.0=Java 25，65.0=Java 21。Ghidra 12.2 必须
+JDK 25（Windows 机上一直没炸正是因为装的是 25）。LaunchSupport 对所有 21 报
+「unsupported java version」同源于此。README/前置要求已改为 JDK 25。Ubuntu 22.04 apt
+只有 openjdk-21 → 走 Adoptium tarball（api.adoptium.net 直连可用）。
+
+**同夜环境坑清单（都绕过、都非 luvre 代码问题）**：
+1. **LaunchSupport 在 nohup 上下文间歇性静默 rc=1**（stdout/stderr 全空，cwd/PATH 无关，
+   复现率约一半）。绕过：pyghidra 的 `launcher.java_home` 是 property，可直接打补丁
+   `PyGhidraLauncher.java_home = property(lambda self: Path(jdk25))` 跳过发现流程。
+2. **/mnt/d（9p）上跑 Ghidra 工程库极慢**（732B 样本分析 15 分钟不出）且 LaunchSupport
+   偶发静默失败——工程目录切 ext4（`LVR_PROJECT_DIR=~/lvr-projects`，注意不能用
+   `~/.luvre`：点前缀路径元素会被 Ghidra 拒绝，manager.py 注释早有警告）。
+3. **wsl.exe 会话退出会杀会话内进程**——nohup 不保险，要 `setsid` 脱离会话；多轮重启
+   后务必 `pgrep -af` 确认真死真活（SIGTERM 可能被 9p D-state 进程无视，kill -9）。
+4. **pending 符号断点会被启动期内部 strcmp 先命中**：glibc/ld.so 处理环境变量时大量
+   调 strcmp（WSL 的巨型 Windows PATH 放大次数）——先断 main 锚定、删锚点后再断
+   libc 符号，才是「真」strcmp。stdin 重定向文件重跑会从头读，适合多次 run。
+5. **Windows 本机 gdb 的 `-exec-interrupt` 对原生目标无效**（sync 模式），卡在 fgets 的
+   会话只能结束重启；inferior stdout 全缓冲 →「零输出 + running」= 卡输入的特征。
+
+**表现记录**：thread_demo 在 gdb 下 worker 线程缺席（pthread_create 返回值未验证），
+luvre 线程面板忠实显示 gdb 所报——面板功能本身以 fake-gdb 单测覆盖。

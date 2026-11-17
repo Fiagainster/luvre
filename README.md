@@ -18,6 +18,12 @@
   <em>Call graph — Ghidra-style hierarchical layout: callers above, callees below, double-click to expand</em>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/demo.gif" width="96%" alt="luvre demo — solve a crackme end to end">
+  <br/>
+  <em>60-second solve: decompile → breakpoint → ASLR static↔runtime convert → NOP patch → "Correct!" → flag from the decoder lab</em>
+</p>
+
 ## 这是什么
 
 打开一个二进制，Ghidra 引擎自动分析；然后在浏览器里以 IDE 三栏布局完成整个手搓流程：
@@ -58,7 +64,7 @@ luvre 是后者的极端形态：**No AI inside**——没有内置大模型，�
 | **✎ decompile** | C 伪代码 + 自研语法高亮；**代码里的函数名/地址可点击跳转**；✎ 重命名 / ✚ 备注 / 复制 / 下载 `.c` |
 | **⌗ disassembly** | 汇编清单（地址/字节/助记符），call 目标可点击跟进 |
 | **◈ call graph** | **函数调用图**（Ghidra 式层次布局）：caller 在上 / callee 在下，层次分层 + 重心排序减少交叉；实线箭头表示调用方向、虚线表示回边；**双击节点增量展开**，滚轮缩放、拖拽平移 |
-| **⚙ 动态调试** | **gdb 桥双传输**（WSL Linux ELF / Windows 本机 PE，**传输选项按宿主自适应**——Linux 宿主上只留本机 gdb 且不再出现 WSL/发行版框，Windows 缺 WSL 时同样收敛）：断点（pending 队列，启动自动补挂）+ **条件断点**（gdb 表达式，如 `$ebx==0x37`，断点表琥珀 chip 展示）、运行/继续/行级单步/**指令级单步**（strip 样本行级 step 会失败）、中断、**写寄存器绕反调试**（$rax=0）、全寄存器面板、调用栈、内存读取一键送解码实验室、**内存补丁**（NOP 填充 / 写原始字节，打完自动回读；ASLR 样本用 `info proc mappings` 重算运行期地址再打）、程序参数与 stdin 暂存、**环境变量启动参数**（GTK 类 GUI 样本喂 `DISPLAY=:99`）、**gdb 命令框**（任意 CLI 命令直达，`handle SIGTRAP nostop pass` 放行自陷样本）、**切样本自动重启会话**（旧会话指向别的程序时提示并可一键切换，页面刷新后提示不再丢失） |
+| **⚙ 动态调试** | **gdb 桥双传输**（WSL Linux ELF / Windows 本机 PE，**传输选项按宿主自适应并本地记忆**）：断点（pending 队列 + **条件断点** `$ebx==0x37` 琥珀 chip + **ignore-count 跳过N次**）、**线程面板**（`-thread-info` chips 点击切换）、运行/继续/行级/**指令级**单步、中断、**写寄存器绕反调试**（$rax=0）、全寄存器面板、调用栈、内存读取一键送解码实验室、**内存补丁**（NOP 填充 / 写原始字节 / **↩ 一键还原**）、**ASLR 静态↔运行期地址换算器**（mappings/info files 双源，点击结果直填补丁地址）、**⤓ 补丁写回样本副本**（节表映射，`_lvr/patched/`，原文件不动）、程序参数与 stdin 暂存、环境变量注入、gdb 命令框、切样本自动重启会话 |
 | **⊞ memory hex** | 按内存块原始读取，翻页/跳偏移（**输入完整 vaddr 自动定位所在内存块**，unmapped 地址列出可读范围）；⧉ 复制为标准 hexdump；**Shift+一键送解码实验室可连发多页**（跨块大数据一次拉满） |
 | **⚡ raw disasm** | **按执行路径的裸反汇编**（混淆兜底）：任意地址起，capstone 顺着真实执行流解码——无条件 JMP 跟随目标、**CALL 实为 JMP 识别**（压栈返回进垃圾的返回地址标记「死路」跳过）、**读取窗口向前扩 512B 余量**（call-as-jmp 目标常比命名入口靠前，向后跳转不断流）、反调试垃圾字节自动恢复到条件跳转目标；HEX 视图 ⚡ 一键从当前字节起解，跳转目标可点击跟进 |
 | **strings** | Ghidra 识别的字符串，一键送入解码实验室；**单击查引用（谁在用它），双击直接跳进引用函数的反编译并高亮那一行** |
@@ -118,6 +124,7 @@ luvre 是后者的极端形态：**No AI inside**——没有内置大模型，�
 - Root-Me KeygenMe（v0.4.1 真题打磨）：strip + 重叠指令混淆 + RDTSC 反调试×3——静态 ⚡ 裸反汇编三段接力还原 imul 主循环推算法，动态 gdb 断点偷参/寄存器对拍，serial 实测 GG 通过
 - Root-Me 自哈希 crackme（v0.4.2 真题第二轮）：732 B 手写汇编——裸反汇编读出 syscall 骨架，HEX Shift 多页拉满 163 字节代码送解码实验室，页内算出种子 0xAC77E166 直推密码，gdb 桥喂 stdin 动态闭环（[writeup-ch20.md](docs/writeup-ch20.md) 逐步复现）；邻题 ch18（VM opcode 型）纯 UI 解出，strace 实证其零输出、成败只能靠内存确认
 - 补丁与条件断点实战（v0.4.4 后）：ch20 条件断点 `$ebx==0x37` 精确停在哈希环第 108 字节，NOP 掉 `jne` 失败分支后错误输入走到成功分支；challenge1.exe（**DYNAMICBASE/ASLR**）pending 符号断点 `strcmp` 运行期解析成 `ucrtbase!strcmp` 免疫重定位，停中偷 `$rcx` 缓冲 + 解码实验室还原 `flag{xor_base64_easy}`，再以 `rdx` 重算运行期基址 NOP 掉 strcmp 后的 `jne`——错误输入打印 `Correct! You got the flag!`（本机 mingw gdb 全程 UI 操作）
+- Linux 宿主全链（v0.5.0）：WSL Ubuntu-22.04（真实 Linux + 本机 gdb）跑通引擎与动态链全流程；POSIX 传输自适应、工程目录 ext4（LVR_PROJECT_DIR）；pthread 双线程样本线程面板就绪。补丁副本可独立分发运行——脱离调试器直接打印 Correct
 
 <p align="center">
   <img src="docs/screenshots/unpack.png" width="72%" alt="PyInstaller unpack modal">
@@ -140,7 +147,7 @@ luvre 是后者的极端形态：**No AI inside**——没有内置大模型，�
 ### 前置要求
 
 - **Python ≥ 3.10**（3.13 实测通过）
-- **Java JDK 21+**（Ghidra 12.x 要求；Java 25 实测通过）
+- **Java JDK 25**（Ghidra 12.2 的类文件是 Java 25 编译——JDK 21 实测会 `UnsupportedClassVersionError`；JDK 25 实测通过）
 - **Ghidra 11.3+ 或 12.x**（[下载](https://github.com/NationalSecurityAgency/ghidra/releases)）
 - **gdb（仅 ⚙ 动态调试需要）**：Windows 上二选一——WSL 发行版里的 gdb（调 Linux ELF）或 mingw 本机 gdb（调 PE）；Linux 上发行版自带的 gdb 即可（面板会自动只留本机传输）。纯静态分析链完全不依赖它
 - Windows 优先（全功能实测）；Linux：单元 + 服务面由 CI（Ubuntu × 2 个 Python 版本）全量验证，本机 gdb 动态调试代码兼容但未实测；macOS 未测试
@@ -267,7 +274,7 @@ CI（GitHub Actions，ubuntu + windows × Python 3.11/3.13）跑 `-m "not engine
 ## 发行
 
 ```bash
-gh release create v0.4.4 --title "v0.4.4" --notes "..."
+gh release create v0.5.0 --title "v0.5.0" --notes "..."
 ```
 
 就这一步：Release 发布事件触发 [.github/workflows/publish.yml](.github/workflows/publish.yml)，

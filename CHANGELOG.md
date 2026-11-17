@@ -2,9 +2,9 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
-## [未发布]
+## [0.5.0] — 2026-11-18
 
-gdb 动态链补完最后一公里（内存补丁 + 条件断点）+ 前端按域拆模块 + 本地 API 防护，全程以真实样本（ch20.bin WSL gdb、challenge1.exe 本机 gdb、ch18 静态冒烟）UI 实操验证，顺手修了 5 处真样本暴露的问题（dev-notes 踩坑 #32–#36）。
+gdb 动态链补完最后一公里：内存补丁（NOP/写字节/一键还原/写回样本副本）+ 条件断点（条件/ignore-count）+ ASLR 静态↔运行期换算器 + 线程面板 + 前端按域拆模块 + 本地 API 防护。全程以真实样本 UI 实操验证——ch20.bin（WSL gdb）、challenge1.exe（本机 gdb，DYNAMICBASE/ASLR）、ch18/ch16 静态、WSL Ubuntu-22.04 真实 Linux 宿主全链（dev-notes 踩坑 #32–#37）。
 
 ### 新增
 
@@ -14,6 +14,13 @@ gdb 动态链补完最后一公里（内存补丁 + 条件断点）+ 前端按�
 - **本地 API 防护（Origin/Host 校验）**：带 `Origin` 头的请求必须与 `Host` 同源，回环绑定时 `Host` 必须是回环名——关死「任意网页对 localhost API 发 no-cors POST」的 drive-by 与 DNS rebinding 两扇门；非浏览器客户端（curl/测试）不送这两个头、不受影响。实测：恶意 Origin 的 GET/POST `/api/open` 与伪造 Host 全部 403
 - **JobFarm 完成任务淘汰**：done/error 任务 30 分钟 TTL + 200 个硬上限，spawn 时惰性清扫——长会话的 job 字典不再无限增长
 - **API 健壮性**：畸形/非 UTF-8 请求体现在返回干净的 400（附原因），不再 500 + 堆栈刷日志
+- **ASLR 静态↔运行期地址换算器**：gdb 页签贴静态或运行期地址自动互转、点击结果一键填入补丁地址。基址解析双源自适应——Linux gdb 走 `info proc mappings`（首个本模块映射 start−offset），mingw gdb 对该命令报 "Not supported on this target" 则回落 `info files` 节区行与静态节表配对求 delta。实测：challenge1.exe（每次运行基址不同）换算值与 entry point 实际运行地址核验一致；ch20.bin（非 PIE）delta=0 自洽
+- **补丁一键还原（↩）**：每次写补丁前先读原始字节作还原凭据，↩ 写回上一次补丁前的字节（还原失败凭据不丢）。实测：NOP → ↩ → 内存面板 `75 1b` 回归 → 放行程序恢复判错
+- **补丁写回样本副本（⤓）**：把本会话全部补丁经节表映射（vaddr→file offset，仅文件-backed 区域，.bss 报 unmapped）写进 `_lvr/patched/<样本名>_patched_<ts>` 副本——原文件永不触碰。实测：challenge1 补丁副本脱离调试器独立运行打印 `Correct! You got the flag!`，原件同输入 `Wrong flag!`
+- **断点 ignore-count**：「跳过N次」输入走 `-break-after`，断点表显示 `skip N`。实测：ch20 哈希环 skip=3 → 第 4 次命中时 ebx=0xa0（163−3），数学精确
+- **线程面板**：`-thread-info` 列出线程 chips（当前线程高亮、帧函数名随行），点击即 `-thread-select` 切换。实测：challenge1 真实双线程目标（T1@strcmp + T2@ntdll 工厂）正确显示
+- **gdb 传输选择记忆**：localStorage 记住上次的传输选项——reload 后静默回落默认值曾让本机 gdb 工作流悄悄变成 WSL 会话（实操捕获）
+- **demo GIF**：`docs/screenshots/demo.gif`（解题全流程：反编译 → 断点 → ASLR 换算 → NOP → Correct → 解码实验室出 flag）
 
 ### 修复
 
@@ -22,6 +29,9 @@ gdb 动态链补完最后一公里（内存补丁 + 条件断点）+ 前端按�
 - **断点条件输入框残留**（challenge1 实测捕获）：加断点只清位置框不清条件框，上一个断点的 `$eax==0` 静默粘到下一个无条件断点上——看起来没条件，其实有。修法：bp-add 成功即清两框
 - **刷新页面后 stale 会话提示丢失**（challenge1 实测捕获）：切样本后页内 open 路径有「会话仍指向旧样本」提示，但刷新恢复路径没有——启动按钮被隐藏且零解释，而后端明明支持一键自动切换。修法：stale 检查并入 1.2s 轮询渲染层（同一目标只提示一次），open 与 reload 两条路径都覆盖
 - **gdb 内存面板把 hex 表达式的回读显示成 0x00000000 起**：patch 回读看起来像「写到了地址 0」——纯 hex 地址表达式现在显示真实地址，符号表达式（$rsp）保留相对编号
+- **gdb 页签栅格不可收缩把控制台挤出视口**（demo 录制捕获）：补丁带下移后栅格改了不可收缩变体，程序输出滚出屏幕——改回可收缩 + 最小高度，720p 下三列与控制台/补丁带同屏
+- **多位置断点表渲染空行**（gdb 把同符号多处命中折叠成 `<MULTIPLE>` 时，无 func/addr 的子条目渲染成只有 ✕ 的空行）——过滤无内容条目
+- **GdbSession.exit 关闭 stdin/stdout/stderr 管道**——reader 线程干净收尾，消除 ResourceWarning
 
 ## [0.4.4] — 2026-11-15
 
