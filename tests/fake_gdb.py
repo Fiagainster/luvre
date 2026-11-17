@@ -17,8 +17,9 @@ out2("=thread-group-added,id=\"i1\"\n")
 out2("(gdb)\n")
 
 state = {"bp": 0}
-bps = {}    # number -> {"loc": str, "cond": str|None}
+bps = {}    # number -> {"loc": str, "cond": str|None, "ignore": int}
 mem = {}    # address string -> bytes (patch roundtrip)
+cur_thread = "1"
 
 
 def read_hex(expr):
@@ -71,13 +72,31 @@ for line in sys.stdin:
             out(f"{token}^done")
         else:
             out(f'{token}^error,msg="No breakpoint number {n}."')
+    elif line.startswith("-break-after"):
+        m = re.match(r'-break-after\s+(\d+)\s+(\d+)\s*$', line)
+        n = int(m.group(1)) if m else None
+        if m and n in bps:
+            bps[n]["ignore"] = int(m.group(2))
+            out(f"{token}^done")
+        else:
+            out(f'{token}^error,msg="No breakpoint number {n}."')
     elif line == "-break-list":
         entries = []
         for i in range(1, state["bp"] + 1):
             bp = bps.get(i, {})
             cond_part = f',cond="{bp["cond"]}"' if bp.get("cond") else ""
-            entries.append(f'{{number="{i}",addr="0x00401370"{cond_part}}}')
+            ignore_part = f',ignore="{bp["ignore"]}"' if bp.get("ignore") else ""
+            entries.append(f'{{number="{i}",addr="0x00401370"{cond_part}{ignore_part}}}')
         out(f'{token}^done,BreakpointTable={{body={{bkpt=[{",".join(entries)}]}}}}')
+    elif line == "-thread-info":
+        out(f'{token}^done,threads=[{{id="{cur_thread}",frame={{level="0",func="main",addr="0x00401370",args=[]}}}}],current-thread-id="{cur_thread}"')
+    elif line.startswith("-thread-select"):
+        m = re.match(r'-thread-select\s+(\d+)\s*$', line)
+        if m:
+            cur_thread = m.group(1)
+            out(f'{token}^done,frame={{level="0",func="main",addr="0x00401370",args=[]}}')
+        else:
+            out(f'{token}^error,msg="unknown thread"')
     elif line.startswith("-break-delete"):
         out(f"{token}^done")
     elif line == "-data-write-memory-bytes" or line.startswith("-data-write-memory-bytes"):
@@ -108,8 +127,16 @@ for line in sys.stdin:
     elif line.startswith("-data-evaluate-expression"):
         out(f'{token}^done,value="42"')
     elif line.startswith("-interpreter-exec console"):
-        # console escape: echo the command back through the ~console stream
-        out(f'~"console: {line[len("-interpreter-exec console "):].strip(chr(34))}\\n"')
+        # console escape: echo the command back through the ~console stream;
+        # `info proc mappings` additionally emits parseable mapping rows so
+        # runtime_base() has something to chew on
+        cmd = line[len("-interpreter-exec console "):].strip().strip('"')
+        if cmd == "info proc mappings":
+            out('~"Start Addr           End Addr       Size     Offset objfile\\n"')
+            out('~"    0x00400000    0x00401000    0x1000        0x0   /tmp/fake_target\\n"')
+            out('~"    0x00401000    0x00402000    0x1000     0x1000   /tmp/fake_target\\n"')
+        else:
+            out(f'~"console: {cmd}\\n"')
         out(f"{token}^done")
     elif line == "-gdb-exit":
         out(f"{token}^exit")

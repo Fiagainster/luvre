@@ -359,6 +359,11 @@ class GdbSession:
             except subprocess.TimeoutExpired:
                 # a target blocked on stdin keeps sync-mode gdb busy — kill hard
                 self.proc.kill()
+            for pipe in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+                try:
+                    pipe.close()   # reader threads hit EOF and finish cleanly
+                except Exception:  # noqa: BLE001
+                    pass
         with self._state_lock:
             self.state["running"] = False
             self.state["dead"] = self.state["dead"] or "session closed"
@@ -472,14 +477,123 @@ class GdbSession:
         whose own signal handlers must receive their traps), ``info proc
         mappings``, ``x/16xw``…  Output arrives through the regular console
         stream and is shown in the gdb console box."""
+        self.console_output(text)
+        return {"command": text.strip()}
+
+    def console_output(self, text: str, timeout: float = DEFAULT_TIMEOUT) -> list[str]:
+        """Run one gdb CLI command and RETURN the console lines it produced.
+
+        In sync-mode gdb the command's console output is emitted before its
+        ^done record and the reader thread processes them in order, so by the
+        time cmd() unblocks the lines are already in the ring — slice from
+        the pre-command length.  Used for parsing `info proc mappings`.
+        """
         text = text.strip()
         if not text:
             raise GdbError("empty command")
         self._require_stopped("running console commands")
         # MI wants a C-string, not shlex quoting (single quotes confuse gdb)
         quoted = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
-        self.cmd(f"-interpreter-exec console {quoted}")
-        return {"command": text}
+        start = len(self.console)
+        self.cmd(f"-interpreter-exec console {quoted}", timeout)
+        return list(self.console[start:])
+
+    def runtime_base(self) -> dict[str, Any]:
+        """Runtime relocation info of the debugee's own module, for the UI's
+        static↔runtime address conversion on ASLR targets.
+
+        Two sources, by availability:
+          * ``info proc mappings`` — Linux gdb.  base = (first mapping owned
+            by the program).start − offset (ELF maps headers at base, offset
+            0; PE at base with the .text row at file offset 0x1000).
+          * ``info files`` — mingw gdb refuses `info proc mappings` with
+            "Not supported on this target", but its section ranges
+            (``0xRUNTIME - 0xRUNTIME is .text``) carry the same delta; the
+            frontend pairs a section name with the static section table.
+        Returns {kind: "mappings"|"sections", ...}; the frontend computes
+        delta = runtime − static for whichever landed.
+        """
+        self._require_stopped("reading module mappings")
+        try:
+            lines = self.console_output("info proc mappings")
+        except GdbError:
+            lines = []
+        rows = []
+        for ln in lines:
+            m = re.match(
+                r"\s*(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s*(\S+)?",
+                ln,
+            )
+            if m:
+                rows.append({
+                    "start": int(m.group(1), 16), "end": int(m.group(2), 16),
+                    "size": int(m.group(3), 16), "offset": int(m.group(4), 16),
+                    "obj": (m.group(5) or "").replace("\\", "/").lower(),
+                })
+        prog_name = str(self.state.get("program") or "").replace("\\", "/").split("/")[-1].lower()
+        candidates = [r for r in rows if prog_name and r["obj"].endswith(prog_name)]
+        if rows:
+            # name match preferred; first row is the fallback (both Linux and
+            # Windows listings put the main module first)
+            first = (candidates or rows)[0]
+            return {"kind": "mappings", "base": first["start"] - first["offset"],
+                    "rows": rows[:8]}
+        # mingw path: `info files` section ranges of the exec file
+        lines = self.console_output("info files")
+        sections = []
+        in_exec = False
+        for ln in lines:
+            if "Local exec file" in ln:
+                in_exec = True
+                continue
+            if not in_exec:
+                continue
+            if " is " in ln and " in " in ln:
+                break  # DLL section rows follow the exec file's own sections
+            m = re.match(r"\s*(0x[0-9a-fA-F]+)\s*-\s*(0x[0-9a-fA-F]+)\s+is\s+(\S+)", ln)
+            if m:
+                sections.append({"name": m.group(3),
+                                 "start": int(m.group(1), 16),
+                                 "end": int(m.group(2), 16)})
+        if not sections:
+            raise GdbError("could not derive runtime relocation info from "
+                           "`info proc mappings` or `info files`")
+        return {"kind": "sections", "sections": sections[:12]}
+
+    def set_break_ignore(self, number: str, count: int) -> dict[str, Any]:
+        """Ignore the first ``count`` hits of a breakpoint (-break-after)."""
+        number = str(number).strip()
+        if not number:
+            raise GdbError("breakpoint number required")
+        count = max(0, int(count))
+        self.cmd(f"-break-after {number} {count}")
+        return {"number": number, "ignore": count}
+
+    def threads(self) -> dict[str, Any]:
+        """All threads of a stopped target (-thread-info)."""
+        self._require_stopped("listing threads")
+        payload = self.cmd("-thread-info", timeout=15)
+        out = []
+        for t in payload.get("threads") or []:
+            if not isinstance(t, dict):
+                continue
+            out.append({
+                "id": str(t.get("id", "")),
+                "name": str(t.get("name", "")) if t.get("name") else "",
+                "details": str(t.get("details", "")) if t.get("details") else "",
+                "frame": (t.get("frame") or {}) if isinstance(t.get("frame"), dict) else {},
+            })
+        return {"threads": out, "current": str(payload.get("current-thread-id", ""))}
+
+    def thread_select(self, thread_id: str) -> dict[str, Any]:
+        """Make another thread current (-thread-select); subsequent stepping
+        and frame commands act on it."""
+        self._require_stopped("switching threads")
+        tid = str(thread_id).strip()
+        if not tid.isdigit():
+            raise GdbError("thread id must be a number")
+        self.cmd(f"-thread-select {tid}", timeout=15)
+        return {"current": tid}
 
     def wait_stop(self, timeout: float = 10.0) -> dict[str, Any] | None:
         """Poll helper: wait until the target reports a stop."""

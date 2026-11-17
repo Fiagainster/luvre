@@ -589,6 +589,23 @@ class StubSession:
     def nop_fill(self, expr, length):
         return {"addr": expr, "count": length, "bytes": "90" * length}
 
+    def set_break_ignore(self, number, count):
+        for b in self.breaks:
+            if b["number"] == str(number):
+                b["ignore"] = int(count)
+        return {"number": str(number), "ignore": int(count)}
+
+    def runtime_base(self):
+        return {"base": 0x7FF7429E5000, "rows": [{"start": 0x7FF7429E5000}]}
+
+    def threads(self):
+        return {"threads": [{"id": "1", "frame": {"func": "main"}},
+                            {"id": "2", "frame": {"func": "worker"}}],
+                "current": "1"}
+
+    def thread_select(self, thread_id):
+        return {"current": str(thread_id)}
+
 
 @pytest.fixture()
 def gdb_server(tmp_path_factory, monkeypatch):
@@ -645,3 +662,68 @@ class TestGdbPatchRoutes:
         assert state.gdb_session.breaks[0]["cond"] == "$ebx>2"
         _, out = post(base, "/api/gdb/break/cond", {"number": "1", "cond": ""})
         assert state.gdb_session.breaks[0]["cond"] is None
+
+
+class TestGdbExtraRoutes:
+    def test_base(self, gdb_server):
+        base, _ = gdb_server
+        _, out = get(base, "/api/gdb/base")
+        assert out["base"] == 0x7FF7429E5000
+
+    def test_threads_and_select(self, gdb_server):
+        base, _ = gdb_server
+        _, out = get(base, "/api/gdb/threads")
+        assert [t["id"] for t in out["threads"]] == ["1", "2"] and out["current"] == "1"
+        _, out = post(base, "/api/gdb/thread/select", {"id": "2"})
+        assert out["current"] == "2"
+
+    def test_break_after(self, gdb_server):
+        base, state = gdb_server
+        post(base, "/api/gdb/break", {"loc": "main"})
+        _, out = post(base, "/api/gdb/break/after", {"number": "1", "count": 3})
+        assert out["ignore"] == 3
+        assert state.gdb_session.breaks[0]["ignore"] == 3
+
+    def test_break_after_bad_count_400(self, gdb_server):
+        base, _ = gdb_server
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(base, "/api/gdb/break/after", {"number": "1", "count": "zz"})
+        assert e.value.code == 400
+
+    def test_patch_export(self, gdb_server, tmp_path):
+        import struct as _struct
+        from luvre.util.binfile import parse_pe
+        # reuse the test-suite's minimal PE builder shape (self-contained here)
+        buf = bytearray(0x200)
+        buf[0:2] = b"MZ"
+        _struct.pack_into("<I", buf, 0x3C, 0x40)
+        buf[0x40:0x44] = b"PE\x00\x00"
+        _struct.pack_into("<HHIIIHH", buf, 0x44, 0x8664, 1, 0, 0, 0, 240, 0x0022)
+        opt = 0x58
+        _struct.pack_into("<HBBIIIII", buf, opt, 0x20B, 14, 0, 0x200, 0, 0, 0x1000, 0x1000)
+        _struct.pack_into("<Q", buf, opt + 24, 0x140000000)
+        sec = bytearray(40)
+        sec[0:8] = b".text\x00\x00\x00"
+        _struct.pack_into("<IIII", sec, 8, 0x1000, 0x1000, 0x200, 0x200)
+        buf[0x148:0x170] = sec
+        buf.extend(b"\x00" * (0x200 - len(buf)))
+        buf.extend(b"\x41" * 0x200)
+        src = tmp_path / "tiny.exe"
+        src.write_bytes(bytes(buf))
+        base, _ = gdb_server
+        _, out = post(base, "/api/gdb/patch/export",
+                      {"path": str(src), "patches": [{"addr": 0x140001003, "bytes": "9090"}]})
+        assert out["ok"] and out["applied"] == 1
+        patched = Path(out["path"]).read_bytes()
+        assert patched[0x203:0x205] == b"\x90\x90"
+        assert src.read_bytes()[0x203:0x205] == b"\x41\x41"  # original untouched
+
+    def test_patch_export_not_image_400(self, gdb_server, tmp_path):
+        src = tmp_path / "tiny.bin"
+        src.write_bytes(b"MZ" + b"\x00" * 200)
+        base, _ = gdb_server
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(base, "/api/gdb/patch/export",
+                 {"path": str(src), "patches": [{"addr": 0x1000, "bytes": "90"}]})
+        assert e.value.code == 400
+        assert "PE/ELF" in e.value.read().decode()

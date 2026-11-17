@@ -171,6 +171,7 @@
             </div>
             <div class="gdb-bp-row">
               <input id="gdb-bp-cond" class="mini-input" type="text" spellcheck="false" placeholder="条件（可空），如 $eax==5 / $esp<0xffffd000" />
+              <input id="gdb-bp-skip" class="mini-input" type="text" spellcheck="false" placeholder="跳过N次" title="先忽略前 N 次命中（-break-after），0=每次都停" />
             </div>
             <div class="list gdb-list" id="gdb-breaks"></div>
             <div class="gdb-controls">
@@ -183,6 +184,8 @@
               <button class="btn btn-xs hidden" id="gdb-interrupt">⏸ 中断</button>
               <button class="btn btn-xs" id="gdb-finish">⤒ 出函数</button>
             </div>
+            <div class="dec-label">线程</div>
+            <div class="list gdb-threads" id="gdb-threads"></div>
             <div class="dec-label">调用栈</div>
             <div class="list gdb-list" id="gdb-stack"></div>
           </div>
@@ -205,25 +208,30 @@
               <button class="btn btn-xs" id="gdb-mem-read">读取</button>
             </div>
             <div class="list gdb-list" id="gdb-mem"></div>
-            <div class="dec-label">内存补丁
-              <span class="spring"></span>
-              <span class="dim" title="x86 NOP = 0x90；写完自动回读上方内存面板">x86 NOP=0x90</span>
-            </div>
-            <div class="gdb-bp-row">
-              <input id="gdb-patch-addr" type="text" spellcheck="false" placeholder="地址表达式，如 0x080480d9 / *0x… 也认" />
-              <input id="gdb-patch-len" class="mini-input" value="2" title="NOP 字节数" />
-              <button class="btn btn-xs" id="gdb-patch-nop" title="填充 NOP（0x90）——跳过比较/反调试的经典手法">NOP</button>
-            </div>
-            <div class="gdb-bp-row">
-              <input id="gdb-patch-bytes" type="text" spellcheck="false" placeholder="写原始字节 hex，如 9090C3" />
-              <button class="btn btn-xs" id="gdb-patch-write">写入</button>
-            </div>
             <div class="dec-label">gdb 控制台</div>
             <div class="gdb-bp-row">
               <input id="gdb-cmd" type="text" spellcheck="false" data-i18n-ph="gdb.cmd.ph" placeholder="gdb 命令，如 handle SIGTRAP nostop pass" />
               <button class="btn btn-xs" id="gdb-cmd-send">⌨</button>
             </div>
             <div class="list gdb-console" id="gdb-console"></div>
+          </div>
+        </div>
+
+        <!-- 全宽补丁带：ASLR 换算 + 内存补丁（第三列塞不下，挤压试过就回不去了） -->
+        <div class="gdb-patch-band">
+          <div class="gdb-bp-row">
+            <input id="gdb-cvt-addr" type="text" spellcheck="false" placeholder="ASLR：贴静态/运行期地址，自动互转" />
+            <button class="btn btn-xs" id="gdb-cvt-load" title="读取当前模块的实际装载基址（Linux: info proc mappings / mingw: info files）">⇄ 基址</button>
+            <span class="gdb-cvt-out dim" id="gdb-cvt-out"></span>
+          </div>
+          <div class="gdb-bp-row">
+            <input id="gdb-patch-addr" type="text" spellcheck="false" placeholder="补丁地址表达式，如 0x080480d9（*0x… 也认）" />
+            <input id="gdb-patch-len" class="mini-input" value="2" title="NOP 字节数" />
+            <button class="btn btn-xs" id="gdb-patch-nop" title="填充 NOP（0x90）——跳过比较/反调试的经典手法">NOP</button>
+            <button class="btn btn-xs" id="gdb-patch-undo" title="还原上一次补丁（写回打补丁前的原始字节）">↩ 还原</button>
+            <input id="gdb-patch-bytes" type="text" spellcheck="false" placeholder="写原始字节 hex，如 9090C3" />
+            <button class="btn btn-xs" id="gdb-patch-write">写入</button>
+            <button class="btn btn-xs" id="gdb-patch-export" title="把本会话的全部补丁经节表映射写进样本文件的副本（_lvr/patched/，原文件不动）">⤓ 副本</button>
           </div>
         </div>
       </div>

@@ -2,8 +2,12 @@
 
 import os
 import struct
+from pathlib import Path
+
+import pytest
 
 from luvre.util.binfile import (
+    apply_patches_to_copy,
     entropy_profile,
     file_hashes,
     parse_elf,
@@ -11,6 +15,7 @@ from luvre.util.binfile import (
     shannon_entropy,
     sniff_format,
     triage,
+    vaddr_to_file_offset,
 )
 
 
@@ -277,3 +282,75 @@ class TestTriage:
         t = triage(os.urandom(2048))
         assert t["sniff"]["format"] == "RAW"
         assert t["overlay_present"] is False
+
+
+# ------------------------------------------------- vaddr→file offset / patch
+
+class TestVaddrToFileOffset:
+    def test_pe(self):
+        data = build_min_pe64()
+        info = parse_pe(data)
+        assert info["image_base"] == 0x140000000
+        # .text: vaddr 0x140001000, raw_offset 0x200
+        assert vaddr_to_file_offset(info, 0x140001000) == 0x200
+        assert vaddr_to_file_offset(info, 0x140001005) == 0x205
+        # below image base / beyond raw extent → unmapped
+        assert vaddr_to_file_offset(info, 0x140000fff) is None
+        assert vaddr_to_file_offset(info, 0x140002000) is None  # raw_size 0x200 ends at 0x140001200
+        assert vaddr_to_file_offset(info, 0x140001fff) is None
+
+    def test_elf(self):
+        # section: sh_addr 0x1000, sh_offset 0x100, size 0x100
+        data = build_min_elf64(section_offset=0x100, section_size=0x100)
+        info = parse_elf(data)
+        assert vaddr_to_file_offset(info, 0x1000) == 0x100
+        assert vaddr_to_file_offset(info, 0x1007) == 0x107
+        assert vaddr_to_file_offset(info, 0x1100) is None  # past section end
+
+    def test_unknown_format(self):
+        assert vaddr_to_file_offset({"format": "RAW", "sections": []}, 0x401000) is None
+
+
+class TestApplyPatchesToCopy:
+    def test_pe_roundtrip(self, tmp_path):
+        src = tmp_path / "tiny.exe"
+        src.write_bytes(build_min_pe64())
+        original = src.read_bytes()
+        out = apply_patches_to_copy(src, [{"addr": 0x140001003, "bytes": "9090"}])
+        assert out["applied"] == 1 and out["total"] == 1 and out["unmapped"] == []
+        patched = Path(out["path"]).read_bytes()
+        assert patched[0x200 + 3 : 0x200 + 5] == b"\x90\x90"
+        assert src.read_bytes() == original  # the original is NEVER touched
+        assert "_lvr" in out["path"] and "patched" in out["path"]
+
+    def test_elf_roundtrip(self, tmp_path):
+        src = tmp_path / "tiny.elf"
+        src.write_bytes(build_min_elf64(section_offset=0x100, section_size=0x100))
+        out = apply_patches_to_copy(src, [{"addr": 0x1002, "bytes": "cc"}])
+        assert out["applied"] == 1
+        patched = Path(out["path"]).read_bytes()
+        assert patched[0x102] == 0xCC
+
+    def test_unmapped_patch_reported(self, tmp_path):
+        # one mapped + one unmapped → partial success, unmapped is reported
+        src = tmp_path / "tiny.exe"
+        src.write_bytes(build_min_pe64())
+        out = apply_patches_to_copy(src, [
+            {"addr": 0x140001003, "bytes": "90"},
+            {"addr": 0x140009000, "bytes": "90"},   # .bss / beyond raw extent
+        ])
+        assert out["applied"] == 1 and out["unmapped"] == ["0x140009000"]
+        patched = Path(out["path"]).read_bytes()
+        assert patched[0x200 + 3] == 0x90
+
+    def test_all_unmapped_raises(self, tmp_path):
+        src = tmp_path / "tiny.exe"
+        src.write_bytes(build_min_pe64())
+        with pytest.raises(ValueError, match="file-backed"):
+            apply_patches_to_copy(src, [{"addr": 0x140009000, "bytes": "90"}])
+
+    def test_not_image_raises(self, tmp_path):
+        src = tmp_path / "plain.txt"
+        src.write_bytes(b"hello world, not an image at all" * 4)
+        with pytest.raises(ValueError, match="PE/ELF"):
+            apply_patches_to_copy(src, [{"addr": 0x401000, "bytes": "90"}])

@@ -298,3 +298,78 @@ class TestConditionalBreak:
         session.load("C:\fake\target.exe")
         with pytest.raises(GdbError):
             session.write_bytes("*", "90")
+
+
+class TestBreakIgnore:
+    def test_set_and_list(self, session):
+        bk = session.insert_break("*0x00401370")
+        session.set_break_ignore(bk["number"], 3)
+        bps = session.list_breaks()
+        assert bps[0].get("ignore") == "3"
+
+    def test_zero_count_clears(self, session):
+        bk = session.insert_break("*0x00401370")
+        session.set_break_ignore(bk["number"], 3)
+        session.set_break_ignore(bk["number"], 0)
+        bps = session.list_breaks()
+        assert "ignore" not in bps[0]
+
+    def test_unknown_bp_errors(self, session):
+        with pytest.raises(GdbError):
+            session.set_break_ignore("99", 1)
+
+
+class TestRuntimeBase:
+    def test_parse_mappings_offset_zero(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.runtime_base()
+        assert res["base"] == 0x400000   # first row start 0x400000 - offset 0
+        assert len(res["rows"]) == 2
+
+    def test_running_target_raises(self, session):
+        session.load("C:\fake\target.exe")
+        session.state["running"] = True
+        with pytest.raises(GdbError, match="running"):
+            session.runtime_base()
+        session.state["running"] = False
+
+
+class TestThreads:
+    def test_list(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.threads()
+        assert res["threads"][0]["id"] == "1"
+        assert res["threads"][0]["frame"]["func"] == "main"
+        assert res["current"] == "1"
+
+    def test_select_and_switch(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.thread_select("2")
+        assert res["current"] == "2"
+        res = session.threads()
+        assert res["current"] == "2"
+
+    def test_select_bad_id(self, session):
+        session.load("C:\fake\target.exe")
+        with pytest.raises(GdbError, match="number"):
+            session.thread_select("x")
+
+    def test_runtime_base_falls_back_to_info_files(self, session, monkeypatch):
+        # mingw gdb refuses `info proc mappings` ("Not supported on this
+        # target") — the `info files` section ranges carry the same delta
+        session.load("C:\fake\target.exe")
+
+        def fake_out(text, timeout=25.0):
+            if "proc mappings" in text:
+                raise GdbError("Not supported on this target.")
+            return ["Local exec file:\n",
+                    "\t`C:\fake\target.exe', file type pei-x86-64.",
+                    "\tEntry point: 0x00401125",
+                    "\t0x00401000 - 0x00401200 is .text",
+                    "\t0x00402000 - 0x00402130 is .data",
+                    "\t0x00403000 - 0x00403100 is .text in C:\WINDOWS\ntdll.dll"]
+        monkeypatch.setattr(session, "console_output", fake_out)
+        res = session.runtime_base()
+        assert res["kind"] == "sections"
+        assert [s["name"] for s in res["sections"]] == [".text", ".data"]
+        assert res["sections"][0]["start"] == 0x401000

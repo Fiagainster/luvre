@@ -572,6 +572,25 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 return self._json({"expr": expr, "len": len(data),
                                    "data_b64": b64.b64encode(data).decode()})
 
+            # runtime load base of the debugee module (ASLR static↔runtime
+            # address conversion on the frontend)
+            if path == "/api/gdb/base":
+                if state.gdb_session is None:
+                    return self._error("no gdb session", 409)
+                try:
+                    return self._json(state.gdb_session.runtime_base())
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+
+            # thread list of a stopped target
+            if path == "/api/gdb/threads":
+                if state.gdb_session is None:
+                    return self._error("no gdb session", 409)
+                try:
+                    return self._json(state.gdb_session.threads())
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+
             # ----- memory
             if path == "/api/memory/blocks":
                 return self._json({"items": state.engine.memory_blocks()})
@@ -732,6 +751,55 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 except Exception as e:  # noqa: BLE001
                     return self._error(f"{type(e).__name__}: {e}", 500)
                 return self._json({"ok": True, **res})
+
+            # ignore the first N hits of a breakpoint (-break-after)
+            if path == "/api/gdb/break/after":
+                sess = state.gdb_session
+                if sess is None:
+                    return self._error("no gdb session", 409)
+                try:
+                    res = sess.set_break_ignore(str(body.get("number", "")),
+                                                int(body.get("count", 0)))
+                except (TypeError, ValueError) as e:
+                    return self._error(f"bad count: {e}")
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+                return self._json({"ok": True, **res})
+
+            # make another thread current (multi-threaded targets)
+            if path == "/api/gdb/thread/select":
+                sess = state.gdb_session
+                if sess is None:
+                    return self._error("no gdb session", 409)
+                try:
+                    res = sess.thread_select(str(body.get("id", "")))
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+                return self._json({"ok": True, **res})
+
+            # write accumulated debugger patches back to a COPY of the sample
+            # file (vaddr → file offset via the section table; the original
+            # on disk is never touched).  patches: [{addr, bytes hex}] with
+            # STATIC addresses (frontend converts ASLR runtime first).
+            if path == "/api/gdb/patch/export":
+                from pathlib import Path as _Path
+
+                from luvre.util.binfile import apply_patches_to_copy
+
+                patches = body.get("patches") or []
+                if not isinstance(patches, list) or not patches:
+                    return self._error("patches required")
+                src = str(body.get("path", "")).strip() or (state.source_path or "")
+                if not src:
+                    return self._error("path required")
+                p = _Path(src)
+                if not p.is_file():
+                    return self._error(f"file not found: {src}")
+                try:
+                    out = apply_patches_to_copy(p, patches)
+                except ValueError as e:
+                    return self._error(str(e))
+                return self._json({"ok": True, **out})
 
             # memory patching: write raw hex bytes or fill NOPs (x86 0x90)
             if path == "/api/gdb/patch":

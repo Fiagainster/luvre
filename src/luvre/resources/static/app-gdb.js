@@ -3,7 +3,9 @@
 
 /* ═══════════════════════ gdb bridge (dynamic debugging) ═══════════════════════ */
 
-const GD = { poll: 0, memBytes: null, pc: null, pendingBps: [], staleHintFor: null };
+const GD = { poll: 0, memBytes: null, pc: null, pendingBps: [], staleHintFor: null,
+             patchHistory: [],   // [{addr, written, prev}] — undo + file export
+             runtimeInfo: null };
 
 function gdbBadge(mode, label) {
   const b = $("#gdb-badge");
@@ -103,14 +105,30 @@ function gdbRenderBreaks(items) {
       `<div class="row" data-pending="${i}"><span class="addr">⏳</span><span class="name">${esc(bp.loc)}${bp.cond ? `<span class="bp-cond">${esc(bp.cond)}</span>` : ""}</span><span class="meta">pending</span></div>`).join("");
     return;
   }
-  box.innerHTML = items.map((b) => {
+  box.innerHTML = items.filter((b) => b.func || b.orig_loc || b.addr).map((b) => {
     const a = b.addr ? String(b.addr).replace(/^0x/, "") : "";
+    const meta = b.ignore ? `skip ${esc(b.ignore)}` : "";
     return `<div class="row" data-num="${esc(b.number)}" data-addr="${a}">
       <span class="addr">#${esc(b.number)}</span>
-      <span class="name">${esc(b.func || b.orig_loc || b.addr || "")}${b.cond ? `<span class="bp-cond" title="${esc(b.cond)}">${esc(b.cond)}</span>` : ""}</span>
+      <span class="name">${esc(b.func || b.orig_loc || b.addr || "")}${b.cond ? `<span class="bp-cond editable" data-num="${esc(b.number)}" title="${esc(t("gdb.cond.edit.title", { num: b.number }))}">${esc(b.cond)}</span>` : ""}</span>
+      <span class="meta">${meta}</span>
       <button class="op-rm" data-del="${esc(b.number)}" title="✕">✕</button>
     </div>`;
   }).join("");
+  // 条件 chip 可点击编辑（清空 = 清除条件）——比删了重加快
+  box.querySelectorAll(".bp-cond.editable").forEach((el) =>
+    el.onclick = async (e) => {
+      e.stopPropagation();
+      const num = el.dataset.num;
+      const next = await askText(t("gdb.cond.edit.title", { num }), el.textContent);
+      if (next == null) return;
+      try {
+        await gdbApi("break/cond", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ number: num, cond: next.trim() }) });
+        toast(t("gdb.toast.cond_set", { num }), "ok", 1600);
+        gdbRefreshLists();
+      } catch (err) { toast("gdb: " + err.message, "error"); }
+    });
   box.querySelectorAll("[data-del]").forEach((btn) =>
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -139,31 +157,155 @@ async function gdbSetExpr(expr) {
   } catch (e) { toast("gdb: " + e.message, "error"); }
 }
 
-/* memory patching: NOP fill (x86 0x90) or raw hex bytes.  After the write
-   the patched region is re-read through the memory panel — the visual
-   confirm doubles as a "did gdb actually take the write" check. */
+/* memory patching: NOP fill (x86 0x90) or raw hex bytes.  The original
+   bytes are captured BEFORE each write — that's the undo credential and,
+   converted static, the payload for "write back to a file copy".  After
+   the write the patched region is re-read through the memory panel. */
 async function gdbPatch(kind) {
   const addr = $("#gdb-patch-addr").value.trim();
   if (!addr) { toast(t("gdb.patch.need_addr"), "info"); return; }
-  let body;
+  let body, count;
   if (kind === "nop") {
-    const n = parseInt($("#gdb-patch-len").value, 10) || 1;
-    body = { addr, nop_len: n };
+    count = parseInt($("#gdb-patch-len").value, 10) || 1;
+    body = { addr, nop_len: count };
   } else {
     const bytes = $("#gdb-patch-bytes").value.trim();
     if (!bytes) { toast(t("gdb.patch.need_bytes"), "info"); return; }
+    count = bytes.replace(/0x|\s/gi, "").length / 2;
     body = { addr, bytes };
   }
   try {
+    const pre = await gdbApi(`memory?expr=${encodeURIComponent(addr)}&len=${count}`);
+    const prev = [...b64ToBytes(pre.data_b64)].map((b) => b.toString(16).padStart(2, "0")).join("");
     const res = await gdbApi("patch", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    GD.patchHistory.push({ addr: res.addr, written: res.bytes, prev });
     logLine(`patch ${res.addr}: ${res.count} B [${res.bytes}]`, "hi");
     toast(t("gdb.toast.patched", { addr: res.addr, n: res.count }), "ok", 2400);
     const rd = await gdbApi(`memory?expr=${encodeURIComponent(res.addr)}&len=${Math.max(res.count, 16)}`);
     gdbRenderMem(b64ToBytes(rd.data_b64), gdbMemBase(res.addr));
   } catch (e) { toast("gdb: " + e.message, "error", 6000); }
+}
+
+async function gdbPatchUndo() {
+  const last = GD.patchHistory.pop();
+  if (!last) { toast(t("gdb.undo.none"), "info"); return; }
+  try {
+    const res = await gdbApi("patch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addr: last.addr, bytes: last.prev }),
+    });
+    logLine(`undo patch ${res.addr} ← ${res.bytes}`, "hi");
+    toast(t("gdb.toast.undo", { addr: res.addr }), "ok", 2200);
+    const rd = await gdbApi(`memory?expr=${encodeURIComponent(res.addr)}&len=${Math.max(res.count ?? 16, 16)}`);
+    gdbRenderMem(b64ToBytes(rd.data_b64), gdbMemBase(res.addr));
+  } catch (e) {
+    GD.patchHistory.push(last);   // 还原失败塞回去，凭据不丢
+    toast("gdb: " + e.message, "error", 6000);
+  }
+}
+
+/* runtime → static conversion for the file patch export (ASLR targets) */
+function gdbRuntimeDelta() {
+  /* delta = runtime − static for the debugee module, from whichever source
+     /api/gdb/base landed: "mappings" (Linux: base vs image base) or
+     "sections" (mingw: a runtime section range vs the static section table) */
+  if (!GD.runtimeInfo || !S.program || !S.program.image_base) return null;
+  const img = parseInt(S.program.image_base, 16);
+  if (GD.runtimeInfo.kind === "mappings") return GD.runtimeInfo.base - img;
+  const secs = (S.triage && S.triage.sections) || [];
+  for (const rsec of GD.runtimeInfo.sections) {
+    const s = secs.find((x) => (x.name || "") === rsec.name);
+    if (!s) continue;
+    const staticStart = S.triage.format === "PE"
+      ? img + Number(s.virtual_address || 0)
+      : Number(s.addr || 0);
+    if (staticStart) return rsec.start - staticStart;
+  }
+  return null;
+}
+
+async function gdbPatchExport() {
+  if (!GD.patchHistory.length) { toast(t("gdb.patch.none_export"), "info"); return; }
+  const patches = GD.patchHistory.map((p) => {
+    const a = typeof p.addr === "string" ? (p.addr.startsWith("0x") ? parseInt(p.addr, 16) : Number(p.addr)) : Number(p.addr);
+    const delta = gdbRuntimeDelta();
+    const staticAddr = delta != null && a >= delta + parseInt(S.program.image_base, 16) ? a - delta : a;
+    return { addr: staticAddr, bytes: p.written };
+  });
+  try {
+    const res = await api("gdb/patch/export", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patches }),
+    });
+    logLine(`patched copy: ${res.path} (${res.applied}/${res.total}${res.unmapped.length ? ", unmapped " + res.unmapped.join(",") : ""})`, "ok");
+    toast(t("gdb.toast.exported", { path: res.path }), "ok", 9000);
+  } catch (e) { toast(e.message, "error", 8000); }
+}
+
+/* ── ASLR static ↔ runtime address converter ──
+   relocation info comes from /api/gdb/base (`info proc mappings` on Linux
+   gdb, `info files` section ranges on mingw); the static side pairs the
+   image base / section table from the loaded program.  Direction is
+   auto-detected: subtracting the delta landing inside the image means the
+   input was runtime, otherwise it was static. */
+async function gdbLoadBase() {
+  try {
+    const res = await gdbApi("base");
+    GD.runtimeInfo = res;
+    logLine(`runtime ${res.kind}: ${res.kind === "mappings" ? "base " + hexpad(res.base) : res.sections.length + " sections"}`, "hi");
+    gdbConvert();
+  } catch (e) { toast("gdb: " + e.message, "error", 6000); }
+}
+
+function gdbConvert() {
+  const out = $("#gdb-cvt-out");
+  if (!out) return;
+  if (!GD.runtimeInfo) { out.textContent = ""; return; }
+  const img = S.program && S.program.image_base ? parseInt(S.program.image_base, 16) : null;
+  const delta = gdbRuntimeDelta();
+  const v = $("#gdb-cvt-addr").value.trim();
+  if (delta == null || !img || !v) {
+    out.textContent = delta == null
+      ? `${t("gdb.cvt.base")}: ${GD.runtimeInfo.kind === "mappings" ? hexpad(GD.runtimeInfo.base) : GD.runtimeInfo.sections.map((s) => s.name).join(", ")}`
+      : `${t("gdb.cvt.base")}: ${hexpad(img + delta)}`;
+    return;
+  }
+  const a = v.startsWith("0x") ? parseInt(v, 16) : parseInt(v, 10);
+  if (!Number.isFinite(a)) { out.textContent = "?"; return; }
+  const imgEnd = img + Number(S.program.size || 0x100000);
+  let st, rt;
+  if (a - delta >= img && a - delta < imgEnd) { rt = a; st = a - delta; }
+  else { st = a; rt = a + delta; }
+  out.innerHTML = `<span class="cvt-res" title="${esc(t("gdb.cvt.fill.title"))}">${esc(t("gdb.cvt.rt"))} ${hexpad(rt)} · ${esc(t("gdb.cvt.st"))} ${hexpad(st)}</span>`;
+  out.querySelector(".cvt-res").onclick = () => {
+    $("#gdb-patch-addr").value = hexpad(rt);
+    toast(t("gdb.toast.filled"), "ok", 1500);
+  };
+}
+
+/* ── threads (multi-threaded targets) ── */
+function gdbRenderThreads(data) {
+  const box = $("#gdb-threads");
+  if (!data || !data.threads || !data.threads.length) {
+    box.innerHTML = `<div class="insp-empty">${esc(t("gdb.threads.none"))}</div>`;
+    return;
+  }
+  box.innerHTML = data.threads.map((th) => {
+    const fn = th.frame && th.frame.func ? " · " + th.frame.func : "";
+    return `<span class="gdb-thread${String(th.id) === data.current ? " cur" : ""}" data-id="${esc(th.id)}" title="${esc(th.details || th.name || "")}">T${esc(th.id)}${fn}</span>`;
+  }).join("");
+  box.querySelectorAll(".gdb-thread").forEach((el) =>
+    el.onclick = async () => {
+      try {
+        await gdbApi("thread/select", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: el.dataset.id }) });
+        toast(t("gdb.toast.thread", { id: el.dataset.id }), "ok", 1500);
+        await gdbPoll();
+      } catch (e) { toast("gdb: " + e.message, "error"); }
+    });
 }
 
 function gdbRenderRegs(regs) {
@@ -235,14 +377,16 @@ function gdbRenderConsole(items) {
 
 async function gdbRefreshLists() {
   if (!GD.poll) return;
-  const [bps, stack, log] = await Promise.all([
+  const [bps, stack, log, threads] = await Promise.all([
     gdbApi("breaks").catch(() => null),
     gdbApi("stack").catch(() => null),
     gdbApi("log").catch(() => null),
+    gdbApi("threads").catch(() => null),
   ]);
   if (bps) gdbRenderBreaks(bps.items);
   if (stack) gdbRenderStack(stack.items);
   if (log) gdbRenderConsole(log.items);
+  gdbRenderThreads(threads);
 }
 
 async function gdbPoll() {
@@ -336,9 +480,13 @@ async function gdbStart() {
     // replay breakpoints placed before the session existed
     for (const bp of GD.pendingBps.splice(0)) {
       try {
-        await gdbApi("break", { method: "POST", headers: { "Content-Type": "application/json" },
+        const r = await gdbApi("break", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ loc: bp.loc, cond: bp.cond || "" }) });
-        logLine(`pending breakpoint planted: ${bp.loc}${bp.cond ? " if " + bp.cond : ""}`, "hi");
+        if (bp.skip > 0 && r.bkpt && r.bkpt.number) {
+          await gdbApi("break/after", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ number: r.bkpt.number, count: bp.skip }) });
+        }
+        logLine(`pending breakpoint planted: ${bp.loc}${bp.cond ? " if " + bp.cond : ""}${bp.skip ? ` (skip ${bp.skip})` : ""}`, "hi");
       } catch (e) { toast(`gdb: ${e.message}`, "error"); }
     }
     gdbRefreshLists();
@@ -373,15 +521,29 @@ function gdbExit() {
   $("#gdb-stdin").disabled = false;
   $("#gdb-env").disabled = false;
   GD.pendingBps = [];
+  GD.patchHistory = [];   // 会话死了，补丁凭据也失效（内存随进程消失）
+  GD.runtimeInfo = null;  // 新会话重新读基址
+  const cvt = $("#gdb-cvt-out");
+  if (cvt) cvt.textContent = "";
   $("#gdb-interrupt").classList.add("hidden");
-  ["#gdb-breaks", "#gdb-regs", "#gdb-stack", "#gdb-mem", "#gdb-console"].forEach(
-    (id) => { $(id).innerHTML = `<div class="insp-empty">—</div>`; });
+  ["#gdb-breaks", "#gdb-regs", "#gdb-stack", "#gdb-mem", "#gdb-console", "#gdb-threads"].forEach(
+    (id) => { const el = $(id); if (el) el.innerHTML = `<div class="insp-empty">—</div>`; });
   GD.memBytes = null;
   logLine("gdb session closed", "hi");
 }
 
 function wireGdb() {
   gdbAdaptTransports();
+  // remember the transport across reloads — silently falling back to the
+  // first option made a reload start a WSL session on a local-gdb workflow
+  const tSel = $("#gdb-transport");
+  try {
+    const saved = localStorage.getItem("lv.gdb.transport");
+    if (saved && tSel.querySelector(`option[value="${saved}"]`)) tSel.value = saved;
+  } catch { /* private mode */ }
+  tSel.addEventListener("change", () => {
+    try { localStorage.setItem("lv.gdb.transport", tSel.value); } catch { /* ignore */ }
+  });
   $("#gdb-start").onclick = gdbStart;
   $("#gdb-exit-btn").onclick = gdbExit;
   $("#gdb-run").onclick = () => gdbExec("run");
@@ -408,19 +570,25 @@ function wireGdb() {
   $("#gdb-bp-add").onclick = async () => {
     const loc = $("#gdb-bp-input").value.trim();
     const cond = $("#gdb-bp-cond").value.trim();
+    const skip = parseInt($("#gdb-bp-skip").value, 10) || 0;
     if (!loc) return;
     $("#gdb-bp-input").value = "";
     $("#gdb-bp-cond").value = "";   // a leftover condition must not leak into the NEXT breakpoint
+    $("#gdb-bp-skip").value = "";
     if (!GD.poll) {
       // no live session yet — queue it; gdbStart replays pending breakpoints
       // (standard debugger behavior: place breakpoints before launching)
-      GD.pendingBps.push({ loc, cond });
+      GD.pendingBps.push({ loc, cond, skip });
       gdbRenderBreaks([]);
       return;
     }
     try {
-      await gdbApi("break", { method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await gdbApi("break", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ loc, cond }) });
+      if (skip > 0 && res.bkpt && res.bkpt.number) {
+        await gdbApi("break/after", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ number: res.bkpt.number, count: skip }) });
+      }
       gdbRefreshLists();
     } catch (e) { toast("gdb: " + e.message, "error"); }
   };
@@ -447,5 +615,12 @@ function wireGdb() {
   $("#gdb-patch-write").onclick = () => gdbPatch("write");
   $("#gdb-patch-bytes").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); $("#gdb-patch-write").click(); }
+  });
+  $("#gdb-patch-undo").onclick = gdbPatchUndo;
+  $("#gdb-patch-export").onclick = gdbPatchExport;
+  $("#gdb-cvt-load").onclick = gdbLoadBase;
+  $("#gdb-cvt-addr").addEventListener("input", () => { if (GD.runtimeInfo) gdbConvert(); });
+  $("#gdb-cvt-addr").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); if (!GD.runtimeInfo) gdbLoadBase(); else gdbConvert(); }
   });
 }

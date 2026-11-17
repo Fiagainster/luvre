@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import math
 import struct
+import time
+from pathlib import Path
 from typing import Any
 
 # --------------------------------------------------------------------- hashes
@@ -117,6 +119,11 @@ def parse_pe(data: bytes) -> dict[str, Any] | None:
         sections = []
         end_max = 0
         sh_off = opt_off + opt_size
+        image_base = 0
+        if bits == 64:
+            image_base = struct.unpack_from("<Q", data, opt_off + 24)[0] if opt_off + 32 <= len(data) else 0
+        elif bits == 32:
+            image_base = struct.unpack_from("<I", data, opt_off + 28)[0] if opt_off + 32 <= len(data) else 0
         for i in range(min(nsec, 96)):
             off = sh_off + i * 40
             if off + 40 > len(data):
@@ -151,6 +158,7 @@ def parse_pe(data: bytes) -> dict[str, Any] | None:
             "bits": bits,
             "machine": _MACHINE_NAMES.get(machine, f"0x{machine:04x}"),
             "characteristics": chars,
+            "image_base": image_base,
             "nsections": nsec,
             "sections": sections,
             "overlay_offset": end_max if overlay else None,
@@ -204,14 +212,14 @@ def parse_elf(data: bytes) -> dict[str, Any] | None:
             if off + e_shentsize > len(data) or off + 32 > len(data):
                 break
             if is64:
-                name_off, s_type, _flags, _addr, offset, size = struct.unpack_from(
+                name_off, s_type, _flags, s_addr, offset, size = struct.unpack_from(
                     f"{end}IIQQQQ", data, off
                 )
             else:
-                name_off, s_type, _flags, _addr, offset, size = struct.unpack_from(
+                name_off, s_type, _flags, s_addr, offset, size = struct.unpack_from(
                     f"{end}IIIIII", data, off
                 )
-            raw_secs.append((i, name_off, s_type, offset, size))
+            raw_secs.append((i, name_off, s_type, offset, size, s_addr))
             if s_type != 8:  # SHT_NOBITS
                 end_max = max(end_max, offset + size)
         end_max = max(end_max, e_shoff + e_shnum * e_shentsize if e_shnum else 0)
@@ -227,21 +235,22 @@ def parse_elf(data: bytes) -> dict[str, Any] | None:
         if strsec is None:
             strsec = next((s for s in raw_secs if s[2] == 3), None)
         if strsec is not None:
-            _i, _no, stype, soff, ssize = strsec
+            _i, _no, stype, soff, ssize, _sa = strsec
             tab = data[soff : soff + ssize]
             if tab:
-                for i, name_off, _t, _o, _s in raw_secs:
+                for i, name_off, _t, _o, _s, _a in raw_secs:
                     if 0 <= name_off < len(tab):
                         nul = tab.find(b"\x00", name_off)
                         nm = tab[name_off : nul if nul >= 0 else len(tab)]
                         names[i] = nm.decode("latin1", "replace")
 
         sections = []
-        for i, name_off, s_type, offset, size in raw_secs:
+        for i, name_off, s_type, offset, size, s_addr in raw_secs:
             sections.append({
                 "index": i,
                 "name": names.get(i, ""),
                 "type": s_type,
+                "addr": s_addr,
                 "offset": offset,
                 "size": size,
                 "entropy": shannon_entropy(data[offset : offset + min(size, 1 << 20)]) if size else 0.0,
@@ -283,3 +292,72 @@ def triage(data: bytes) -> dict[str, Any]:
         info["overlay_size"] = max(0, len(data) - 0)
         info["overlay_present"] = False
     return info
+
+
+# ------------------------------------------------- vaddr → file offset (patch)
+
+def vaddr_to_file_offset(info: dict[str, Any], vaddr: int) -> int | None:
+    """Map a STATIC virtual address onto a file offset via the section table.
+
+    Works on the dict from parse_pe / parse_elf.  Only file-backed extents
+    are mapped (PE: raw_size window; ELF: SHT_NOBITS sections are skipped) —
+    a debugger memory patch that lands in .bss has no home in the file and
+    must be reported unmapped instead of silently corrupting a neighbour.
+    """
+    if info["format"] == "PE":
+        image_base = int(info.get("image_base") or 0)
+        rva = vaddr - image_base
+        if rva < 0:
+            return None
+        for s in info.get("sections", []):
+            raw_size = int(s.get("raw_size") or 0)
+            raw_off = int(s.get("raw_offset") or 0)
+            va = int(s.get("virtual_address") or 0)
+            if raw_size and va <= rva < va + raw_size:
+                return raw_off + (rva - va)
+        return None
+    if info["format"] == "ELF":
+        for s in info.get("sections", []):
+            addr = int(s.get("addr") or 0)
+            size = int(s.get("size") or 0)
+            off = int(s.get("offset") or 0)
+            if addr and s.get("type") != 8 and addr <= vaddr < addr + size:
+                return off + (vaddr - addr)
+        return None
+    return None
+
+
+def apply_patches_to_copy(src: Path, patches: list[dict[str, Any]]) -> dict[str, Any]:
+    """Write the sample's bytes with debugger patches applied to a COPY under
+    `<sample dir>/_lvr/patched/` — the original on disk is never touched.
+
+    Each patch is {addr: int, bytes: hex-str} with a STATIC virtual address
+    (the frontend converts runtime→static for ASLR targets before calling).
+    """
+    data = bytearray(src.read_bytes())
+    info = parse_pe(bytes(data)) or parse_elf(bytes(data))
+    if info is None:
+        raise ValueError("not a PE/ELF image — cannot map addresses to file offsets")
+    applied: list[str] = []
+    unmapped: list[str] = []
+    for pt in patches:
+        addr = int(pt.get("addr", -1))
+        try:
+            blob = bytes.fromhex(str(pt.get("bytes", "")))
+        except ValueError as e:
+            raise ValueError(f"bad patch hex for {addr:#x}: {e}") from e
+        off = vaddr_to_file_offset(info, addr)
+        if off is None or off < 0 or off + len(blob) > len(data):
+            unmapped.append(f"0x{addr:x}")
+            continue
+        data[off : off + len(blob)] = blob
+        applied.append(f"0x{addr:x}")
+    if not applied:
+        raise ValueError("no patch landed on a file-backed region "
+                         f"(unmapped: {', '.join(unmapped) or 'all'})")
+    outdir = src.parent / "_lvr" / "patched"
+    outdir.mkdir(parents=True, exist_ok=True)
+    out = outdir / f"{src.stem}_patched_{int(time.time())}{src.suffix}"
+    out.write_bytes(bytes(data))
+    return {"path": str(out), "applied": len(applied), "total": len(patches),
+            "unmapped": unmapped}

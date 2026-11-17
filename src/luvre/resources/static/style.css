@@ -957,20 +957,39 @@ body.dragging::after {
 }
 .gdb-args-row input { flex: 1; min-width: 0; }
 #gdb-target { font-size: 11px; margin-left: 4px; white-space: nowrap; }
+.tabpane[data-pane="gdb"] { overflow-y: auto; }
 .gdb-grid {
-  flex: 1;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: 1.1fr 1fr 1.1fr;
   gap: 10px;
-  padding: 8px 10px;
-  min-height: 0;
-  overflow: hidden;
+  padding: 8px 10px 0;
+  min-height: 300px;
 }
+/* full-width patch band below the grid — the third column squeezed the
+   patch inputs to nothing at 1280px (same class of bug as the XOR results) */
+.gdb-patch-band {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px 8px;
+}
+.gdb-patch-band .gdb-cvt-out { flex: 1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gdb-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 .gdb-bp-row { display: flex; gap: 6px; align-items: center; }
 .gdb-bp-row input { flex: 1; min-width: 0; }
 
 /* breakpoint condition chip inside the break list (gdb `cond=` field) */
+.bp-cond.editable { cursor: pointer; position: relative; }
+.bp-cond.editable:hover { filter: brightness(1.15); }
+/* gdb thread chips (multi-threaded targets) */
+.gdb-threads { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg0); max-height: 64px; overflow: auto; }
+.gdb-thread { padding: 1px 8px; border: 1px solid var(--line); border-radius: 10px; font-size: 11px; font-family: 'JetBrains Mono', Consolas, monospace; cursor: pointer; color: var(--dim); }
+.gdb-thread:hover { color: var(--text); border-color: var(--cyan); }
+.gdb-thread.cur { color: var(--cyan); border-color: var(--cyan); background: rgba(var(--cyan-rgb, 80,180,220), .12); }
+/* ASLR converter result line */
+.gdb-cvt-out { font-size: 11px; padding: 0 2px; min-height: 14px; }
+.cvt-res { color: var(--cyan); cursor: pointer; }
 .bp-cond { margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--amber-soft, rgba(214,158,46,.15)); color: var(--amber, #b8860b); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; display: inline-block; vertical-align: middle; }
 .gdb-list {
   flex: 1;
