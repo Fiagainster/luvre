@@ -478,3 +478,170 @@ class TestAnnotationsAndRecent:
         assert out["items"][0]["path"] == str(sample)
         assert out["items"][0]["name"] == "recent_sample.bin"
         assert out["items"][0]["size"] == 202
+
+
+class TestOriginGuard:
+    """Drive-by / DNS-rebinding defense: cross-origin requests must 403."""
+
+    def test_post_with_foreign_origin_403(self, server):
+        req = urllib.request.Request(
+            server + "/api/open", data=json.dumps({"path": "x"}).encode(),
+            headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as e:
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+        assert e.value.code == 403
+
+    def test_get_with_foreign_origin_403(self, server):
+        req = urllib.request.Request(server + "/api/status",
+                                     headers={"Origin": "http://evil.example"})
+        with pytest.raises(urllib.error.HTTPError) as e:
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+        assert e.value.code == 403
+
+    def test_same_origin_post_passes(self, server):
+        # the UI's own fetches send Origin=<server host:port>; must pass
+        port = urllib.request.urlopen(server + "/api/status", timeout=10).geturl()
+        origin = port.rsplit("/", 2)[0] if port.startswith("http") else server
+        req = urllib.request.Request(
+            server + "/api/decode", data=json.dumps(
+                {"input_b64": base64.b64encode(b"hi").decode(), "recipe": []}).encode(),
+            headers={"Content-Type": "application/json", "Origin": origin},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.status == 200
+
+    def test_rebound_host_403(self, server):
+        # DNS rebinding: a page naming attacker.example but hitting loopback
+        req = urllib.request.Request(server + "/api/status",
+                                     headers={"Host": "attacker.example"})
+        with pytest.raises(urllib.error.HTTPError) as e:
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+        assert e.value.code == 403
+
+    def test_no_headers_pass(self, server):
+        # curl / tests / scripts send neither header
+        status, _ = get(server, "/api/status")
+        assert status == 200
+
+
+class TestJobFarmSweep:
+    def test_finished_jobs_swept_after_ttl(self):
+        from luvre.server.app import JobFarm, JOB_TTL
+        farm = JobFarm()
+        jid = farm.spawn("noop", lambda job: None)
+        for _ in range(100):
+            if farm.get(jid) and farm.get(jid).status != "running":
+                break
+            time.sleep(0.05)
+        farm.get(jid).created -= (JOB_TTL + 60)  # age it past the TTL
+        farm.spawn("noop", lambda job: None)     # spawn triggers the sweep
+        assert farm.get(jid) is None
+
+    def test_running_jobs_never_swept(self):
+        from luvre.server.app import JobFarm, JOB_TTL
+        farm = JobFarm()
+        gate = threading.Event()
+        farm.spawn("stuck", lambda job: gate.wait(5))
+        jobs = [j for j in farm._jobs.values()]
+        assert len(jobs) == 1
+        jobs[0].created -= (JOB_TTL + 60)
+        farm.spawn("noop", lambda job: None)
+        assert farm.get(jobs[0].id) is not None  # running job survives
+        gate.set()
+
+
+class StubSession:
+    """Bare GdbSession surface for route tests (no subprocess)."""
+
+    def __init__(self):
+        self._n = 0
+        self.breaks = []
+
+    def status(self):
+        return {"loaded": True, "running": False, "exited": False, "dead": None,
+                "stop": {"reason": "breakpoint-hit", "func": "main", "addr": "0x00401370"},
+                "program": "stub.exe", "console": [], "console_tail": []}
+
+    def insert_break(self, loc, condition=None):
+        self._n += 1
+        bk = {"number": str(self._n), "addr": "0x00401370", "func": "main", "orig_loc": loc}
+        if condition:
+            bk["cond"] = condition
+        self.breaks.append(bk)
+        return bk
+
+    def set_break_condition(self, number, condition):
+        for b in self.breaks:
+            if b["number"] == str(number):
+                b["cond"] = condition or None
+        return {"number": str(number), "condition": condition}
+
+    def write_bytes(self, expr, hex_bytes):
+        clean = hex_bytes.strip().lower()
+        if not clean or len(clean) % 2 or not all(c in "0123456789abcdef" for c in clean):
+            raise ValueError("bad hex bytes")  # mirror GdbSession's validation
+        return {"addr": expr, "count": len(clean) // 2, "bytes": clean}
+
+    def nop_fill(self, expr, length):
+        return {"addr": expr, "count": length, "bytes": "90" * length}
+
+
+@pytest.fixture()
+def gdb_server(tmp_path_factory, monkeypatch):
+    monkeypatch.setenv("LVR_DATA_DIR", str(tmp_path_factory.mktemp("lvrdata3")))
+    state = AppState(StubEngine())
+    state.gdb_session = StubSession()
+    httpd = serve(state, "127.0.0.1", 0)
+    port = httpd.server_address[1]
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{port}", state
+    httpd.shutdown()
+
+
+class TestGdbPatchRoutes:
+    def test_patch_nop(self, gdb_server):
+        base, _ = gdb_server
+        _, out = post(base, "/api/gdb/patch", {"addr": "*0x401370", "nop_len": 4})
+        assert out["ok"] and out["count"] == 4 and out["bytes"] == "90" * 4
+
+    def test_patch_write(self, gdb_server):
+        base, _ = gdb_server
+        _, out = post(base, "/api/gdb/patch", {"addr": "0x402000", "bytes": "9090C3"})
+        assert out["ok"] and out["bytes"] == "9090c3"
+
+    def test_patch_bad_hex_500(self, gdb_server):
+        base, _ = gdb_server
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(base, "/api/gdb/patch", {"addr": "0x402000", "bytes": "zz"})
+        assert e.value.code == 500
+
+    def test_patch_needs_addr(self, gdb_server):
+        base, _ = gdb_server
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(base, "/api/gdb/patch", {"bytes": "90"})
+        assert e.value.code == 400
+
+    def test_patch_no_session_409(self, server):
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(server, "/api/gdb/patch", {"addr": "0x1", "nop_len": 2})
+        assert e.value.code == 409
+
+    def test_break_with_condition(self, gdb_server):
+        base, state = gdb_server
+        _, out = post(base, "/api/gdb/break", {"loc": "*0x401370", "cond": "$eax==5"})
+        assert out["bkpt"]["cond"] == "$eax==5"
+        assert state.gdb_session.breaks[0]["cond"] == "$eax==5"
+
+    def test_break_cond_route(self, gdb_server):
+        base, state = gdb_server
+        post(base, "/api/gdb/break", {"loc": "main"})
+        _, out = post(base, "/api/gdb/break/cond", {"number": "1", "cond": "$ebx>2"})
+        assert out["ok"] and out["condition"] == "$ebx>2"
+        assert state.gdb_session.breaks[0]["cond"] == "$ebx>2"
+        _, out = post(base, "/api/gdb/break/cond", {"number": "1", "cond": ""})
+        assert state.gdb_session.breaks[0]["cond"] is None

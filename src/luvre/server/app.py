@@ -86,14 +86,37 @@ class Job:
         }
 
 
+# Finished jobs stay queryable (download links, unpack file viewer) for a
+# while, then get swept — the dict used to grow forever in long sessions.
+JOB_TTL = 30 * 60  # seconds a finished job remains listed
+JOB_CAP = 200      # hard cap; oldest finished jobs evicted first
+
+
 class JobFarm:
     def __init__(self):
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _finished(job: Job) -> bool:
+        return job.status in ("done", "error")
+
+    def _sweep_locked(self) -> None:
+        now = time.time()
+        stale = [j for j in self._jobs.values()
+                 if self._finished(j) and now - j.created > JOB_TTL]
+        for j in stale:
+            del self._jobs[j.id]
+        if len(self._jobs) > JOB_CAP:
+            finished = sorted((j for j in self._jobs.values() if self._finished(j)),
+                              key=lambda j: j.created)
+            for j in finished[: len(self._jobs) - JOB_CAP]:
+                del self._jobs[j.id]
+
     def spawn(self, kind: str, target: Callable[[Job], Any]) -> str:
         with self._lock:
+            self._sweep_locked()
             self._counter += 1
             job = Job(f"j{self._counter}", kind)
             self._jobs[job.id] = job
@@ -284,6 +307,38 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
         def log_message(self, fmt: str, *args: Any) -> None:  # default chatter stays off
             pass
 
+        def _same_origin_guard(self) -> bool:
+            """Reject drive-by requests from web pages (and DNS rebinding).
+
+            Any website a user visits can fire no-cors POSTs at a localhost
+            API: responses stay unreadable (CORS), but the side effects still
+            land — opening a sample, booting gdb, spawning jobs.  Two cheap
+            checks close that door without any configuration:
+              * an Origin header, when present, must name the same host:port
+                as the request's own Host header (browsers always send Origin
+                on cross-origin requests, and on same-origin POSTs it matches
+                Host anyway);
+              * when the server is bound to loopback, the Host header must be
+                one of the loopback names — a rebound (attacker-chosen) Host
+                names a different hostname and fails.
+            Non-browser clients (curl, tests, gdb scripts) send neither
+            header and pass untouched.
+            """
+            host = self.headers.get("Host")
+            origin = self.headers.get("Origin")
+            if origin and host and urlparse(origin).netloc != host:
+                return False
+            if host:
+                try:
+                    bhost, bport = self.server.server_address[:2]
+                except Exception:  # noqa: BLE001 — exotic server, skip binding check
+                    return True
+                if bhost in ("127.0.0.1", "::1", "localhost"):
+                    if host not in (f"127.0.0.1:{bport}", f"localhost:{bport}",
+                                    f"[::1]:{bport}", f"::1:{bport}"):
+                        return False
+            return True
+
         def log_request(self, code: Any = "-", size: Any = "-") -> None:
             """Concise request log with latency; successful static hits stay quiet (B8)."""
             try:
@@ -312,7 +367,12 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
             if length > MAX_BODY:
                 raise ValueError("body too large")
             raw = self.rfile.read(length) if length else b"{}"
-            return json.loads(raw.decode("utf-8") or "{}")
+            try:
+                return json.loads(raw.decode("utf-8") or "{}")
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                # a non-UTF-8 / malformed body is a client problem — answer a
+                # clean 400 instead of a 500 with a traceback in the log
+                raise ValueError(f"bad JSON body: {e}") from e
 
         def _static(self, rel: str) -> None:
             if rel in ("", "/"):
@@ -345,9 +405,16 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:  # noqa: N802
             self._t0 = time.perf_counter()
             try:
+                if not self._same_origin_guard():
+                    return self._error("forbidden: cross-origin request", 403)
                 self._route_get()
             except BrokenPipeError:
                 pass
+            except ValueError as e:  # malformed path/body params → client error
+                try:
+                    self._error(str(e), 400)
+                except Exception:  # noqa: BLE001
+                    pass
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
                 try:
@@ -358,9 +425,16 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             self._t0 = time.perf_counter()
             try:
+                if not self._same_origin_guard():
+                    return self._error("forbidden: cross-origin request", 403)
                 self._route_post()
             except BrokenPipeError:
                 pass
+            except ValueError as e:  # bad JSON body / bad params → client error
+                try:
+                    self._error(str(e), 400)
+                except Exception:  # noqa: BLE001
+                    pass
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
                 try:
@@ -631,8 +705,9 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 if sess is None:
                     return self._error("no gdb session", 409)
                 loc = str(body.get("loc", "")).strip()
+                cond = str(body.get("cond", "")).strip() or None
                 try:
-                    return self._json({"ok": True, "bkpt": sess.insert_break(loc)})
+                    return self._json({"ok": True, "bkpt": sess.insert_break(loc, condition=cond)})
                 except Exception as e:  # noqa: BLE001
                     return self._error(f"{type(e).__name__}: {e}", 500)
 
@@ -645,6 +720,41 @@ def make_handler(state: AppState) -> type[BaseHTTPRequestHandler]:
                 except Exception as e:  # noqa: BLE001
                     return self._error(f"{type(e).__name__}: {e}", 500)
                 return self._json({"ok": True})
+
+            # attach / clear a condition on an existing breakpoint
+            if path == "/api/gdb/break/cond":
+                sess = state.gdb_session
+                if sess is None:
+                    return self._error("no gdb session", 409)
+                try:
+                    res = sess.set_break_condition(str(body.get("number", "")),
+                                                   str(body.get("cond", "")))
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+                return self._json({"ok": True, **res})
+
+            # memory patching: write raw hex bytes or fill NOPs (x86 0x90)
+            if path == "/api/gdb/patch":
+                sess = state.gdb_session
+                if sess is None:
+                    return self._error("no gdb session", 409)
+                expr = str(body.get("addr", "")).strip()
+                if not expr:
+                    return self._error("addr required")
+                nop_len = None
+                if body.get("nop_len"):
+                    try:
+                        nop_len = int(body.get("nop_len"))
+                    except (TypeError, ValueError):
+                        return self._error("nop_len must be a number")
+                try:
+                    if nop_len:
+                        res = sess.nop_fill(expr, nop_len)
+                    else:
+                        res = sess.write_bytes(expr, str(body.get("bytes", "")))
+                except Exception as e:  # noqa: BLE001
+                    return self._error(f"{type(e).__name__}: {e}", 500)
+                return self._json({"ok": True, **res})
 
             if path == "/api/gdb/set":
                 sess = state.gdb_session
