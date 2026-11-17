@@ -255,6 +255,12 @@ class GdbSession:
             if cls == "running":
                 self.state["running"] = True
                 self.state["stop"] = None
+                if self.state["exited"]:
+                    # rerun after a normal exit (confirm off + second -exec-run):
+                    # ^running means the target is live again — keeping the old
+                    # exited flag made every later stop render as "正常退出"
+                    # (real-sample catch: ch20 conditional bp hit invisible)
+                    self.state["exited"] = False
             elif cls == "stopped":
                 self.state["running"] = False
                 self.state["stop"] = parse_stopped(rec["payload"])
@@ -359,16 +365,43 @@ class GdbSession:
 
     # ------------------------------------------------------------- features
 
-    def insert_break(self, loc: str) -> dict[str, Any]:
-        """loc: function name, file:line, or *0xADDR."""
+    def insert_break(self, loc: str, condition: str | None = None) -> dict[str, Any]:
+        """loc: function name, file:line, or *0xADDR.
+
+        condition: optional gdb expression — the breakpoint only fires while
+        it holds (``-break-insert -c``; e.g. "$eax==5" or "$rsp<0xffffd000").
+        Double quotes are rejected because the condition rides inside quotes.
+        """
         loc = loc.strip()
         if not loc:
             raise GdbError("empty breakpoint location")
-        payload = self.cmd(f"-break-insert {shlex.quote(loc) if not loc.startswith('*') else loc}")
+        quoted_loc = shlex.quote(loc) if not loc.startswith("*") else loc
+        if condition:
+            condition = condition.strip()
+            if '"' in condition:
+                raise GdbError("condition must not contain double quotes")
+            payload = self.cmd(f'-break-insert -c "{condition}" {quoted_loc}')
+        else:
+            payload = self.cmd(f"-break-insert {quoted_loc}")
         bk = payload.get("bkpt") or {}
         if isinstance(bk, list):
             bk = bk[0]
         return bk
+
+    def set_break_condition(self, number: str, condition: str) -> dict[str, Any]:
+        """Attach / replace a condition on an existing breakpoint; an empty
+        condition clears it (``-break-condition N`` with no expr)."""
+        number = str(number).strip()
+        if not number:
+            raise GdbError("breakpoint number required")
+        condition = (condition or "").strip()
+        if '"' in condition:
+            raise GdbError("condition must not contain double quotes")
+        if condition:
+            self.cmd(f'-break-condition {number} "{condition}"')
+        else:
+            self.cmd(f"-break-condition {number}")
+        return {"number": number, "condition": condition}
 
     def delete_break(self, number: str) -> None:
         self.cmd(f"-break-delete {number}")
@@ -466,8 +499,26 @@ class GdbSession:
         values = self.cmd("-data-list-register-values x")
         return format_register_values(names if isinstance(names, list) else [], values)
 
+    @staticmethod
+    def _addr_expr(expr: str) -> str:
+        """Normalize a memory ADDRESS expression.
+
+        ``-data-read/write-memory-bytes`` evaluate ADDRESS as an EXPRESSION —
+        the ``*`` prefix is breakpoint syntax and means DEREFERENCE here, so
+        ``*0x080480d9`` silently became "contents of 0x080480d9 used as an
+        address" (garbage like 0x75491b75, real-sample catch).  Users paste
+        breakpoint-style stars everywhere, so strip a leading one.
+        """
+        expr = str(expr).strip()
+        if expr.startswith("*"):
+            expr = expr[1:].strip()
+        if not expr:
+            raise GdbError("empty address expression")
+        return expr
+
     def read_memory(self, expr: str, count: int) -> bytes:
         self._require_stopped("reading memory")
+        expr = self._addr_expr(expr)
         count = max(1, min(int(count), 1 << 20))
         payload = self.cmd(f'-data-read-memory-bytes "{expr}" {count}')
         chunks = payload.get("memory") or []
@@ -476,6 +527,33 @@ class GdbSession:
             if isinstance(c, dict) and "contents" in c:
                 data.extend(bytes.fromhex(str(c["contents"])))
         return bytes(data)
+
+    def write_bytes(self, addr_expr: str, hex_bytes: str) -> dict[str, Any]:
+        """Patch target memory at ``addr_expr`` with raw bytes (hex string).
+
+        ``-data-write-memory-bytes`` goes through gdb, so breakpoint traps and
+        the instruction cache stay coherent — NOPing out a comparison
+        mid-session just works on the next resume.  Requires a stopped target.
+        """
+        self._require_stopped("patching memory")
+        addr_expr = self._addr_expr(addr_expr)
+        clean = re.sub(r"0x|\s+", "", str(hex_bytes), flags=re.IGNORECASE).lower()
+        if not clean or len(clean) % 2 or not re.fullmatch(r"[0-9a-f]+", clean):
+            raise GdbError("bad hex bytes (want even-length hex, e.g. 9090c3)")
+        if len(clean) // 2 > 4096:
+            raise GdbError("patch too large (max 4096 bytes)")
+        self.cmd(f'-data-write-memory-bytes "{addr_expr}" {clean}')
+        return {"addr": addr_expr, "count": len(clean) // 2, "bytes": clean}
+
+    def nop_fill(self, addr_expr: str, length: int) -> dict[str, Any]:
+        """Fill ``length`` bytes with x86 NOPs (0x90) — the classic patch.
+
+        One 0x90 per byte keeps it length-exact; smarter multi-byte NOPs are
+        irrelevant for skipping code (the skipped bytes simply execute as
+        no-ops).  ARM/other architectures: write explicit bytes instead.
+        """
+        length = max(1, min(int(length), 4096))
+        return self.write_bytes(addr_expr, "90" * length)
 
     def stack(self) -> list[dict[str, Any]]:
         self._require_stopped("reading the stack")

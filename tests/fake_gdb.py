@@ -1,4 +1,5 @@
 """A minimal fake gdb: speaks just enough MI over stdio for session tests."""
+import re
 import sys
 import time
 
@@ -16,6 +17,17 @@ out2("=thread-group-added,id=\"i1\"\n")
 out2("(gdb)\n")
 
 state = {"bp": 0}
+bps = {}    # number -> {"loc": str, "cond": str|None}
+mem = {}    # address string -> bytes (patch roundtrip)
+
+
+def read_hex(expr):
+    """Bytes to report for a read: patched contents win over the default."""
+    key = expr.strip().strip('"').lstrip("*")
+    if key in mem:
+        return mem[key].hex()
+    return "41424344"
+
 
 for line in sys.stdin:
     line = line.strip()
@@ -35,15 +47,46 @@ for line in sys.stdin:
     elif line.startswith("-gdb-set env"):
         out(f"{token}^done")
     elif line.startswith("-break-insert"):
+        m = re.match(r'-break-insert -c "([^"]*)" (.+)$', line)
+        if m:
+            cond, loc = m.group(1), m.group(2)
+        else:
+            cond, loc = None, line[len("-break-insert "):]
         state["bp"] += 1
         n = state["bp"]
-        out(f'{token}=breakpoint-created,bkpt={{number="{n}",addr="0x00401370"}}')
-        out(f'{token}^done,bkpt={{number="{n}",type="breakpoint",addr="0x00401370"}}')
+        bps[n] = {"loc": loc, "cond": cond}
+        cond_part = f',cond="{cond}"' if cond else ""
+        out(f'{token}=breakpoint-created,bkpt={{number="{n}",addr="0x00401370"{cond_part}}}')
+        out(f'{token}^done,bkpt={{number="{n}",type="breakpoint",addr="0x00401370"{cond_part}}}')
+    elif line.startswith("-break-condition"):
+        m = re.match(r'-break-condition\s+(\d+)\s+"([^"]*)"$', line)
+        n = int(m.group(1)) if m else None
+        if m and n in bps:
+            bps[n]["cond"] = m.group(2) or None
+            out(f"{token}^done")
+        elif re.match(r'-break-condition\s+(\d+)\s*$', line):
+            n = int(re.match(r'-break-condition\s+(\d+)\s*$', line).group(1))
+            if n in bps:
+                bps[n]["cond"] = None
+            out(f"{token}^done")
+        else:
+            out(f'{token}^error,msg="No breakpoint number {n}."')
     elif line == "-break-list":
-        entries = ",".join(f'{{number="{i}",addr="0x00401370"}}' for i in range(1, state["bp"] + 1))
-        out(f'{token}^done,BreakpointTable={{body={{bkpt=[{entries}]}}}}')
+        entries = []
+        for i in range(1, state["bp"] + 1):
+            bp = bps.get(i, {})
+            cond_part = f',cond="{bp["cond"]}"' if bp.get("cond") else ""
+            entries.append(f'{{number="{i}",addr="0x00401370"{cond_part}}}')
+        out(f'{token}^done,BreakpointTable={{body={{bkpt=[{",".join(entries)}]}}}}')
     elif line.startswith("-break-delete"):
         out(f"{token}^done")
+    elif line == "-data-write-memory-bytes" or line.startswith("-data-write-memory-bytes"):
+        m = re.match(r'-data-write-memory-bytes\s+"([^"]+)"\s+([0-9a-fA-F]+)\s*$', line)
+        if m:
+            mem[m.group(1).strip().lstrip("*")] = bytes.fromhex(m.group(2))
+            out(f"{token}^done")
+        else:
+            out(f'{token}^error,msg="bad write"')
     elif line in ("-exec-run", "-exec-continue"):
         out(f"{token}^running")
         time.sleep(0.3)
@@ -57,7 +100,9 @@ for line in sys.stdin:
     elif line == "-data-list-register-values x":
         out(f'{token}^done,register-values=[{{number="0",value="0x11"}},{{number="1",value="0x22"}},{{number="2",value="0x33"}}]')
     elif line.startswith("-data-read-memory-bytes"):
-        out(f'{token}^done,memory=[{{begin="0x0",contents="41424344",size="4"}}]')
+        m = re.search(r'"([^"]+)"', line)
+        hexdata = read_hex(m.group(1)) if m else "41424344"
+        out(f'{token}^done,memory=[{{begin="0x0",contents="{hexdata}",size="{len(hexdata)//2}"}}]')
     elif line == "-stack-list-frames":
         out(f'{token}^done,stack=[frame={{level="0",func="main",addr="0x00401370"}},frame={{level="1",func="__start",addr="0x00401000"}}]')
     elif line.startswith("-data-evaluate-expression"):

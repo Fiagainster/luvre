@@ -193,3 +193,108 @@ class TestSessionFlow:
             time.sleep(0.1)
         assert any("Reading symbols" in line for line in session.console)
         assert any("Reading symbols" in line for line in session.console)
+
+
+class TestPatch:
+    def test_write_bytes_roundtrip(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.write_bytes("0x00402000", "9090C3")
+        assert res["count"] == 3 and res["bytes"] == "9090c3"
+        assert session.read_memory("0x00402000", 3) == bytes.fromhex("9090c3")
+
+    def test_write_bytes_accepts_0x_prefix_and_spaces(self, session):
+        session.load("C:\fake\target.exe")
+        session.write_bytes("0x00402000", "0x 90 90")
+        assert session.read_memory("0x00402000", 2) == b"\x90\x90"
+
+    def test_write_bytes_bad_hex_raises(self, session):
+        session.load("C:\fake\target.exe")
+        with pytest.raises(GdbError):
+            session.write_bytes("0x00402000", "zz")
+        with pytest.raises(GdbError):
+            session.write_bytes("0x00402000", "909")  # odd length
+        with pytest.raises(GdbError):
+            session.write_bytes("0x00402000", "")
+
+    def test_write_bytes_running_target_raises(self, session):
+        session.load("C:\fake\target.exe")
+        session.state["running"] = True
+        with pytest.raises(GdbError, match="running"):
+            session.write_bytes("0x00402000", "90")
+        session.state["running"] = False
+
+    def test_nop_fill(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.nop_fill("*0x00403000", 4)
+        assert res["count"] == 4
+        assert session.read_memory("*0x00403000", 4) == b"\x90" * 4
+
+    def test_nop_fill_clamps(self, session):
+        session.load("C:\fake\target.exe")
+        res = session.nop_fill("0x00403000", 99999)
+        assert res["count"] == 4096
+
+
+class TestConditionalBreak:
+    def test_insert_with_condition(self, session):
+        bk = session.insert_break("*0x00401370", condition="$eax==5")
+        assert bk["number"] == "1"
+        assert bk["cond"] == "$eax==5"
+        bps = session.list_breaks()
+        assert bps[0]["cond"] == "$eax==5"
+
+    def test_insert_without_condition_has_none(self, session):
+        bk = session.insert_break("main")
+        assert "cond" not in bk
+
+    def test_condition_with_quote_raises(self, session):
+        with pytest.raises(GdbError, match="quote"):
+            session.insert_break("main", condition='$rax=="x"')
+
+    def test_set_break_condition(self, session):
+        bk = session.insert_break("*0x00401370")
+        res = session.set_break_condition(bk["number"], "$ebx>3")
+        assert res["condition"] == "$ebx>3"
+        bps = session.list_breaks()
+        assert bps[0]["cond"] == "$ebx>3"
+
+    def test_clear_break_condition(self, session):
+        bk = session.insert_break("*0x00401370", condition="$eax==1")
+        session.set_break_condition(bk["number"], "")
+        bps = session.list_breaks()
+        assert not bps[0].get("cond")
+
+    def test_set_condition_unknown_bp_errors(self, session):
+        with pytest.raises(GdbError):
+            session.set_break_condition("99", "$rax>0")
+
+    def test_rerun_after_exit_clears_exited(self, session):
+        # ch20 real-sample catch: after a normal exit, a second -exec-run must
+        # resurrect the target — a stale exited flag rendered every later
+        # breakpoint stop as "正常退出" and hid the registers panel
+        session.load("C:\fake\target.exe")
+        session.insert_break("*0x00401370")
+        session.state["exited"] = True   # pretend a previous run ended normally
+        session.run()
+        stop = session.wait_stop(timeout=5)
+        assert stop is not None and stop["reason"] == "breakpoint-hit"
+        st = session.status()
+        assert st["running"] is False
+        assert st["exited"] is False
+
+    def test_write_accepts_breakpoint_star(self, session):
+        # the '*' prefix is breakpoint syntax; in an ADDRESS expression it
+        # means dereference and silently wrote to garbage (ch20 real catch)
+        session.load("C:\fake\target.exe")
+        session.write_bytes("*0x00402000", "9090")
+        assert session.read_memory("0x00402000", 2) == b"\x90\x90"
+
+    def test_read_accepts_breakpoint_star(self, session):
+        session.load("C:\fake\target.exe")
+        session.write_bytes("0x00402000", "4142")
+        assert session.read_memory("*0x00402000", 2) == b"AB"
+
+    def test_write_empty_addr_raises(self, session):
+        session.load("C:\fake\target.exe")
+        with pytest.raises(GdbError):
+            session.write_bytes("*", "90")
