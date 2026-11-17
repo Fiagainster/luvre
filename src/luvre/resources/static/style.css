@@ -969,6 +969,9 @@ body.dragging::after {
 .gdb-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 .gdb-bp-row { display: flex; gap: 6px; align-items: center; }
 .gdb-bp-row input { flex: 1; min-width: 0; }
+
+/* breakpoint condition chip inside the break list (gdb `cond=` field) */
+.bp-cond { margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--amber-soft, rgba(214,158,46,.15)); color: var(--amber, #b8860b); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; display: inline-block; vertical-align: middle; }
 .gdb-list {
   flex: 1;
   min-height: 60px;

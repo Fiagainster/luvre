@@ -169,6 +169,9 @@
               <input id="gdb-bp-input" type="text" spellcheck="false" placeholder="*0x401370 或 main" />
               <button class="btn btn-xs" id="gdb-bp-add">+ 断点</button>
             </div>
+            <div class="gdb-bp-row">
+              <input id="gdb-bp-cond" class="mini-input" type="text" spellcheck="false" placeholder="条件（可空），如 $eax==5 / $esp<0xffffd000" />
+            </div>
             <div class="list gdb-list" id="gdb-breaks"></div>
             <div class="gdb-controls">
               <button class="btn btn-primary btn-xs" id="gdb-run">▶ 运行</button>
@@ -202,6 +205,19 @@
               <button class="btn btn-xs" id="gdb-mem-read">读取</button>
             </div>
             <div class="list gdb-list" id="gdb-mem"></div>
+            <div class="dec-label">内存补丁
+              <span class="spring"></span>
+              <span class="dim" title="x86 NOP = 0x90；写完自动回读上方内存面板">x86 NOP=0x90</span>
+            </div>
+            <div class="gdb-bp-row">
+              <input id="gdb-patch-addr" type="text" spellcheck="false" placeholder="地址表达式，如 0x080480d9 / *0x… 也认" />
+              <input id="gdb-patch-len" class="mini-input" value="2" title="NOP 字节数" />
+              <button class="btn btn-xs" id="gdb-patch-nop" title="填充 NOP（0x90）——跳过比较/反调试的经典手法">NOP</button>
+            </div>
+            <div class="gdb-bp-row">
+              <input id="gdb-patch-bytes" type="text" spellcheck="false" placeholder="写原始字节 hex，如 9090C3" />
+              <button class="btn btn-xs" id="gdb-patch-write">写入</button>
+            </div>
             <div class="dec-label">gdb 控制台</div>
             <div class="gdb-bp-row">
               <input id="gdb-cmd" type="text" spellcheck="false" data-i18n-ph="gdb.cmd.ph" placeholder="gdb 命令，如 handle SIGTRAP nostop pass" />
@@ -451,6 +467,11 @@
 <div id="toasts"></div>
 
 <script src="/static/i18n.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app-core.js"></script>
+<script src="/static/app-decoder.js"></script>
+<script src="/static/app-graph.js"></script>
+<script src="/static/app-gdb.js"></script>
+<script src="/static/app-workstation.js"></script>
+<script src="/static/app-boot.js"></script>
 </body>
 </html>
