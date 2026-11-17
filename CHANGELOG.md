@@ -2,6 +2,27 @@
 
 所有显著变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本遵循语义化。
 
+## [未发布]
+
+gdb 动态链补完最后一公里（内存补丁 + 条件断点）+ 前端按域拆模块 + 本地 API 防护，全程以真实样本（ch20.bin WSL gdb、challenge1.exe 本机 gdb、ch18 静态冒烟）UI 实操验证，顺手修了 5 处真样本暴露的问题（dev-notes 踩坑 #32–#36）。
+
+### 新增
+
+- **gdb 内存补丁面板**（⚙ 动态调试页签）：NOP 填充（x86 `0x90`，字节数可调）与原始字节写入（hex），走 MI `-data-write-memory-bytes`——经 gdb 落地，断点陷阱与指令缓存自动一致，停中打完补丁直接放行验证；写完自动回读上方内存面板做可视确认。全流程实测：ch20（ELF/WSL）NOP 掉 `jne` 失败分支，错误输入走到 `Well done man` 成功分支；challenge1.exe（PE/本机，**ASLR 下**）以运行期重算地址 NOP 掉 strcmp 后的 `jne`，错误输入打印 `Correct! You got the flag!`
+- **gdb 条件断点**：断点输入旁新增条件框（gdb 表达式，如 `$ebx==0x37`），走 `-break-insert -c`；`/api/gdb/break/cond` 可对既有断点附加/清除条件（`-break-condition`）；断点表以琥珀 chip 展示条件，pending 断点重放同样携带条件。实测 ch20 哈希环 `$ebx==0x37` 精确命中第 108 字节（寄存器 ebx=0x37 面板可证）
+- **前端按域拆模块**（零构建多 script 方案，非 ES module）：app.js（2933 行单体）拆为 `app-core`（helpers/弹窗/右键菜单/全局状态）· `app-decoder`（解码实验室）· `app-graph`（调用图）· `app-gdb`（动态调试）· `app-workstation`（工作台面板）· `app-boot`（boot 接线）六个文件，共享全局词法作用域，加载顺序由 index.html 固定；全部通过 node 拼接重复声明检查与真实浏览器 boot 冒烟
+- **本地 API 防护（Origin/Host 校验）**：带 `Origin` 头的请求必须与 `Host` 同源，回环绑定时 `Host` 必须是回环名——关死「任意网页对 localhost API 发 no-cors POST」的 drive-by 与 DNS rebinding 两扇门；非浏览器客户端（curl/测试）不送这两个头、不受影响。实测：恶意 Origin 的 GET/POST `/api/open` 与伪造 Host 全部 403
+- **JobFarm 完成任务淘汰**：done/error 任务 30 分钟 TTL + 200 个硬上限，spawn 时惰性清扫——长会话的 job 字典不再无限增长
+- **API 健壮性**：畸形/非 UTF-8 请求体现在返回干净的 400（附原因），不再 500 + 堆栈刷日志
+
+### 修复
+
+- **重跑已退出的目标后所有停靠状态显示为「正常退出」**（ch20 实测捕获）：`-exec-run` 的 `^running` 只置 running=True 不清 exited 标志，渲染层 exited 优先级最高——条件断点命中被永久盖成「正常退出」、寄存器面板不出现。修法：running 转换时清除 exited（目标运行中即非已退出）；fake gdb 回归测试固化
+- **`*0x…` 写进内存表达式被 gdb 当解引用**（ch20 实测捕获）：`-data-read/write-memory-bytes` 的 ADDRESS 是表达式上下文，断点语法的 `*` 前缀在这里意味着「取该地址的内存内容当地址」——`*0x080480d9` 静默变成 `Cannot access memory at address 0x75491b75`。后端 `_addr_expr()` 统一剥引导 `*`（读写两处），patch 输入框 placeholder 改为表达式写法
+- **断点条件输入框残留**（challenge1 实测捕获）：加断点只清位置框不清条件框，上一个断点的 `$eax==0` 静默粘到下一个无条件断点上——看起来没条件，其实有。修法：bp-add 成功即清两框
+- **刷新页面后 stale 会话提示丢失**（challenge1 实测捕获）：切样本后页内 open 路径有「会话仍指向旧样本」提示，但刷新恢复路径没有——启动按钮被隐藏且零解释，而后端明明支持一键自动切换。修法：stale 检查并入 1.2s 轮询渲染层（同一目标只提示一次），open 与 reload 两条路径都覆盖
+- **gdb 内存面板把 hex 表达式的回读显示成 0x00000000 起**：patch 回读看起来像「写到了地址 0」——纯 hex 地址表达式现在显示真实地址，符号表达式（$rsp）保留相对编号
+
 ## [0.4.4] — 2026-11-15
 
 PyPI 正式上线 + 真题审计打磨：解码实验室 XOR 结果区三层布局连环坑根修（叠画→压瘪→压成 9px 残条）、boot 静默失联自检、README 立场改写、ch20 复现手记全事实化（逐条对照工具重验 + 本地解题脚本 + int 0x80 读法教学）。

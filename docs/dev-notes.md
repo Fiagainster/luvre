@@ -362,3 +362,43 @@ WSL（`wsl_ok=false`）同样收敛。顺手修了一个被前端轮询放大的
 都阻塞这么久）——拆出 `_gdb_env_probe()`，探测中一律返回 probing stub 不再叠加；
 `gdb_start` 加 POSIX 硬闸，stale 页面/裸 API 传 `transport=wsl` 直接报「wsl transport
 requires a Windows host」。
+
+## 通宵迭代踩坑：gdb patch/条件断点真样本实测（2026-11-16/17，[未发布]）
+
+**踩坑 #32 — `-exec-run` 重跑已退出的目标不清 exited 标志**：ch20 条件断点 `$ebx==0x37`
+命中（MI 侧 `times="1"`、`Breakpoint 2, 0x08048119` 都在），UI 却显示「正常退出」、寄存器
+面板不出。根因：`^running` 的 `_on_exec` 只置 `running=True`/`stop=None`，上一轮正常退出
+的 `exited=True` 留着；`gdbRenderStatus` 里 exited 分支优先级高于 stop——停中状态被永久
+盖住。修法一行：running 转换时清 `exited`（目标运行中即非已退出）。教训：**状态机的每个
+转换都要问「从哪来」**，rerun 是 confirm off 之后的常规路径，不是边角。
+
+**踩坑 #33 — `*0x…` 是断点语法，进内存表达式上下文就是解引用**：patch 面板照搬断点写法
+填 `*0x080480d9`，`-data-write-memory-bytes` 的 ADDRESS 是**表达式**，gdb 把 `*` 当解引用
+求值——取 0x080480d9 处 4 字节内存（`75 1b 49 b8`）当地址 → `Cannot access memory at
+address 0x75491b75`，报错地址乍看毫无规律（其实是小端读出来的指令字节）。修法：
+`GdbSession._addr_expr()` 统一剥引导 `*`（读/写两处都过），patch placeholder 改表达式写法。
+教训：**同一工具内同一前缀在两个上下文里语义相反**，后端归一化比前端提示更可靠。
+
+**踩坑 #34 — 断点条件输入框残留**：challenge1 上先加过 `$eax==0` 的断点，之后插无条件
+`strcmp` 断点，结果新断点带着旧条件——bp-add 只清位置框不清条件框。条件是隐式状态，
+残留即静默改变语义。修法：bp-add 成功即清两框。教训：**多输入框共一按钮时，每个框都要
+进「用后即清」清单**。
+
+**踩坑 #35 — stale 会话提示只盖了 open 路径，刷新恢复路径裸奔**：切样本 → 页面刷新 →
+活的旧会话把「启动会话」按钮藏起来，零提示（后端明明支持一键自动切换）。修法：stale
+比对并入 1.2s 轮询渲染层（`GD.staleHintFor` 同目标只提示一次），open 与 reload 两条路径
+自然都覆盖。教训：**提示逻辑放进渲染层而非单一入口**，路径多的时候入口清单永远列不全。
+
+**踩坑 #36 — DYNAMICBASE（ASLR）样本的静态地址运行期无效**：challenge1.exe
+`dllchar=0x0160`（dynamicbase+nx），预运行按 Ghidra 静态基址下断 → 运行期
+`Cannot insert breakpoint 1. Cannot access memory at address 0x1400019c8`，且 warning 后
+程序照跑（gdb 不 refuse）。另：Windows 本机 gdb 对原生目标的 `-exec-interrupt` 无效
+（sync 模式），卡死会话只能杀掉重来。实战流程（已全程 UI 验证）：**pending 符号断点**
+（`strcmp` → 运行期解析成 `ucrtbase!strcmp`，天然免疫重定位）→ 停中读 `$rdx` 与静态密文
+地址求基址漂移 → 运行期地址打 NOP → 放行验证行为改变。另外 inferior stdout 全缓冲
+（管道）意味着卡 fgets 时一行输出都看不到——「无输出 + running」就是卡输入的特征。
+
+**顺手修**：gdb 内存面板对纯 hex 表达式显示真实起始地址（patch 回读不再看起来像写到
+地址 0）；畸形/非 UTF-8 请求体返回 400 + 原因（不再 500 + 堆栈）；JobFarm 30min TTL +
+200 上限惰性清扫；Origin/Host 同源校验关 drive-by 与 DNS rebinding（恶意 Origin GET/
+POST 与伪造 Host 实测全 403，非浏览器客户端零影响）。
